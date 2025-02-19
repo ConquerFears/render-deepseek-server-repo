@@ -24,10 +24,11 @@ def deepseek_request():
             deepseek_response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant"},
+                    {"role": "system", "content": "You are a helpful, concise assistant. Please provide short and direct answers only."},
                     {"role": "user", "content": user_text},
                 ],
-                stream=False
+                stream=False,
+                max_tokens = 100 
             )
             deepseek_text_response = deepseek_response.choices[0].message.content.strip()
             print(f"DeepSeek Response: {deepseek_text_response}")
