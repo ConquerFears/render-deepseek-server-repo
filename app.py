@@ -26,7 +26,7 @@ def gemini_request():
         try:
             response = model.generate_content( # Use Gemini API to generate content
                 [
-                    {"role": "system", "parts": ["You are a helpful, concise assistant. Please provide short and direct answers only."]}, # System prompt as parts
+                    # REMOVED SYSTEM ROLE FOR TESTING
                     {"role": "user", "parts": [user_text]}, # User input as parts
                 ],
                 generation_config=genai.types.GenerationConfig(max_output_tokens=100) # Set max tokens
