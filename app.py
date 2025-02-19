@@ -43,5 +43,22 @@ def deepseek_request():
         print(f"Error processing request: {e}")
         return "Internal server error", 500, {'Content-Type': 'text/plain'} # Plain text error
 
+@app.route('/echo', methods=['POST'])
+def echo_input():
+    try:
+        data = request.get_json()
+        if not data or 'user_input' not in data:
+            return "No 'user_input' provided in request body", 400, {'Content-Type': 'text/plain'} # Plain text error
+
+        user_text = data['user_input']
+        print(f"Echoing back to Roblox: {user_text}") # Log what we are echoing
+
+        # *** Return the received text directly as PLAIN TEXT ***
+        return user_text, 200, {'Content-Type': 'text/plain'}
+
+    except Exception as e:
+        print(f"Error in /echo endpoint: {e}")
+        return "Error processing echo request", 500, {'Content-Type': 'text/plain'} # Plain text error
+
 if __name__ == '__main__':
     app.run(debug=True)
