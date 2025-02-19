@@ -5,7 +5,7 @@ import os  # To access environment variables
 app = Flask(__name__)
 
 # Initialize OpenAI client - we'll set API key from environment variable later
-client = OpenAI(base_url="https://api.deepseek.com") # API Key will be handled securely via Render's environment variables
+client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com") # Get API Key from environment variable
 
 @app.route('/', methods=['GET'])
 def hello_world():
