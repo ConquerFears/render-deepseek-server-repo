@@ -7,7 +7,7 @@ app = Flask(__name__)
 # Configure Gemini API
 GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY") # Make sure you set this environment variable
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-2-flash') # Specify Gemini 2.0 Flash model
+model = genai.GenerativeModel('models/gemini-2.0-flash') # Corrected model name here!
 
 @app.route('/', methods=['GET'])
 def hello_world():
