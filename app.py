@@ -15,7 +15,7 @@ def deepseek_request():
     try:
         data = request.get_json()
         if not data or 'user_input' not in data:
-            return jsonify({"error": "No 'user_input' provided in request body"}), 400
+            return "No 'user_input' provided in request body", 400, {'Content-Type': 'text/plain'} # Plain text error
 
         user_text = data['user_input']
         print(f"Received input from Roblox: {user_text}")
@@ -32,16 +32,16 @@ def deepseek_request():
             deepseek_text_response = deepseek_response.choices[0].message.content.strip()
             print(f"DeepSeek Response: {deepseek_text_response}")
 
-            # *** ENSURE you are using jsonify to return JSON response ***
-            return jsonify({"status": "success", "deepseek_response": deepseek_text_response}), 200
+            # *** Return PLAIN TEXT response instead of JSON ***
+            return deepseek_text_response, 200, {'Content-Type': 'text/plain'}
 
         except Exception as deepseek_error:
             print(f"Error calling DeepSeek API: {deepseek_error}")
-            return jsonify({"error": "Error communicating with DeepSeek API"}), 500
+            return "Error communicating with DeepSeek API", 500, {'Content-Type': 'text/plain'} # Plain text error
 
     except Exception as e:
         print(f"Error processing request: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return "Internal server error", 500, {'Content-Type': 'text/plain'} # Plain text error
 
 if __name__ == '__main__':
     app.run(debug=True)
