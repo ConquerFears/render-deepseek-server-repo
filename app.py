@@ -23,11 +23,12 @@ def gemini_request():
         user_text = data['user_input']
         print(f"Received input from Roblox: {user_text}")
 
+        system_prompt = "You are a helpful, concise assistant. Please provide short and direct answers only." # Define system prompt
+
         try:
             response = model.generate_content( # Use Gemini API to generate content
                 [
-                    # REMOVED SYSTEM ROLE FOR TESTING
-                    {"role": "user", "parts": [user_text]}, # User input as parts
+                    {"role": "user", "parts": [system_prompt, user_text]}, # Combine system and user prompt in "user" role
                 ],
                 generation_config=genai.types.GenerationConfig(max_output_tokens=100) # Set max tokens
             )
