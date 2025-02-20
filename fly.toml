@@ -1,4 +1,4 @@
-app = "roblox-gemini-bridge-flask"  
+app = "roblox-gemini-bridge-flask"
 
 kill_signal = "SIGINT"
 kill_timeout = "5s"
@@ -8,9 +8,6 @@ processes = []
 [experimental]
   allowed_public_ports = []
   auto_rollback_machines = true
-
-[build]
-  image = "python:3.10-slim-buster" # Or a newer Python version if you prefer
 
 [env]
   GEMINI_API_KEY = ""
