@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import google.generativeai as genai
 import psycopg2
 import os
+import psycopg2.extras  # Import psycopg2.extras
 
 app = Flask(__name__)
 
@@ -160,8 +161,7 @@ def create_game_record(server_instance_id, game_settings):
             cur.close()
             conn.close()
 
-
-    def create_round_record(game_id, round_number, round_type):
+def create_round_record(game_id, round_number, round_type):
     """
     Inserts a new round record into the 'rounds' table.
 
@@ -201,8 +201,8 @@ def create_game_record(server_instance_id, game_settings):
             conn.close()
 
 
-    @app.route('/test_db_insert', methods=['GET'])
-    def test_db_insert():
+@app.route('/test_db_insert', methods=['GET']) # Corrected indentation here too
+def test_db_insert():
     """
     Tests the create_game_record and create_round_record functions.
     """
