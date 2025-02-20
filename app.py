@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import google.generativeai as genai
 import psycopg2
 import os
+from flask import jsonify
 
 app = Flask(__name__)
 
@@ -167,18 +168,8 @@ def create_game_record(server_instance_id, game_settings):
 
     finally:
         if conn:
-            cur.close()
-            conn.close()
-
-    except Exception as error: # Just catch general Exception for now (for testing)
-    if isinstance(error, psycopg2.Error): # Check if it's a psycopg2.Error inside
-        print("psycopg2.Error caught!") # Add a specific log
-    print("Error in create_game_record (INSERT):", error)
-    return None
-    
-    finally:
-        if conn:
-            cur.close()
+            if cur: # Check if cursor exists before closing
+                cur.close()
             conn.close()
 
 def create_round_record(game_id, round_number, round_type):
@@ -217,7 +208,8 @@ def create_round_record(game_id, round_number, round_type):
 
     finally:
         if conn:
-            cur.close()
+            if cur: # Check if cursor exists before closing
+                cur.close()
             conn.close()
 
 
@@ -244,4 +236,3 @@ def test_db_insert():
     except Exception as e:
         print(f"Error in /test_db_insert endpoint: {e}")
         return jsonify({"status": "error", "message": f"Error during database insert test: {e}"})
-
