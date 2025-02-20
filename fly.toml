@@ -1,4 +1,4 @@
-app = "your-app-name"  # Replace "your-app-name" with the name you chose in step 3
+app = "roblox-gemini-bridge-flask"  
 
 kill_signal = "SIGINT"
 kill_timeout = "5s"
@@ -13,11 +13,11 @@ processes = []
   image = "python:3.10-slim-buster" # Or a newer Python version if you prefer
 
 [env]
-  GEMINI_API_KEY = ""  # You will set this later via Fly.io secrets
-  DATABASE_URL = ""    # You will set this later when you create the Postgres database
+  GEMINI_API_KEY = ""
+  DATABASE_URL = ""
 
 [http_service]
-  internal_port = 5000 # Flask defaults to port 5000
+  internal_port = 5000
   auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
