@@ -111,11 +111,12 @@ def echo_input():
 
 @app.route('/test_db', methods=['GET'])
 def test_db_connection():
-    conn = get_db_connection() # <---- Crucial: Is it calling get_db_connection()?
+    print("Entering /test_db route...")  # <--- ADD THIS LINE
+    conn = get_db_connection()
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute("SELECT 1;")  # Simple test query
+            cur.execute("SELECT 1;")
             result = cur.fetchone()
             cur.close()
             conn.close()
