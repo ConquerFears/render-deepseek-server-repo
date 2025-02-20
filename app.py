@@ -19,16 +19,16 @@ generation_config = {
 
 # Initialize Gemini Model with the configuration
 model = genai.GenerativeModel(
-    model_name='models/gemini-2.0-flash',
+    model_name='models/gemini-2.0-flash', # Double check this model name is correct in Gemini API docs
     generation_config=generation_config
 )
 
-DATABASE_URL = os.environ.get("DATABASE_URL")  # Get DATABASE_URL from env variable
+DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL from env variable
 
 def get_db_connection():  # Function to get a database connection
     conn = None
     try:
-        print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}") # Log the DATABASE_URL
+        print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}") # Log the DATABASE_URL directly
         conn = psycopg2.connect(DATABASE_URL)  # Connect using the URL from env
         return conn
     except (Exception, psycopg2.Error) as error:
@@ -40,7 +40,7 @@ def get_db_connection():  # Function to get a database connection
 @app.route('/', methods=['GET'])
 def hello_world():
     print(f"Checking DATABASE_URL in root route: {DATABASE_URL}") # Log DATABASE_URL in root route
-    return 'Hello, World! This is your Render server (now on Fly.io with Postgres!).'
+    return 'Hello, World! This is your Fly.io server with Postgres!' # Updated message
 
 @app.route('/gemini_request', methods=['POST'])
 def gemini_request():
@@ -132,7 +132,8 @@ def hello_test_route():
 
 def create_game_record(server_instance_id, game_settings):
     """
-    (Simplified) Tests accessing the 'games' table.
+    (Simplified) Tests accessing the 'games' table and currently just checks if it's accessible.
+    In the future, this function will be expanded to actually insert a new game record.
     """
     conn = None
     try:
@@ -142,20 +143,20 @@ def create_game_record(server_instance_id, game_settings):
 
         cur = conn.cursor()
         sql = """
-            SELECT game_id FROM games LIMIT 1;  -- Simplified query: Select game_id, limit 1
+            SELECT game_id FROM games LIMIT 1;  -- Simplified query: Select game_id, limit 1 (FOR TESTING TABLE ACCESS)
         """
-        print(f"Executing SQL Query: {sql}") # Log the query
+        print(f"Executing SQL Query (TESTING TABLE ACCESS): {sql}") # Log the query purpose
         cur.execute(sql) # Execute the simplified query
 
         result = cur.fetchone() # Try to fetch a result
         conn.commit() # Keep commit for now, though not strictly needed for SELECT
         if result:
-            return result[0] # Return the game_id if found
+            return result[0] # Return the game_id if found (just indicating table access is OK)
         else:
             return "Games table accessible, but no data found (or table empty?)" # Indicate table is accessible
 
     except (Exception, psycopg2.Error) as error:
-        print("Error in create_game_record (simplified query):", error)
+        print("Error in create_game_record (simplified query - TESTING TABLE ACCESS):", error)
         return "Error accessing games table: " + str(error) # Return error message
 
     finally:
