@@ -132,8 +132,14 @@ def hello_test_route():
 
 def create_game_record(server_instance_id, game_settings):
     """
-    (Simplified) Tests accessing the 'games' table and currently just checks if it's accessible.
-    In the future, this function will be expanded to actually insert a new game record.
+    Inserts a new game record into the 'games' table.
+
+    Args:
+        server_instance_id (str): Unique identifier for the server instance.
+        game_settings (dict): Dictionary of game settings (e.g., difficulty, map).
+
+    Returns:
+        str: The game_id of the newly created game record if successful, None on error.
     """
     conn = None
     try:
@@ -143,17 +149,26 @@ def create_game_record(server_instance_id, game_settings):
 
         cur = conn.cursor()
         sql = """
-            SELECT game_id FROM games LIMIT 1;  -- Simplified query: Select game_id, limit 1 (FOR TESTING TABLE ACCESS)
+            INSERT INTO games (game_id, settings, start_time)
+            VALUES (%s, %s, NOW()::TIMESTAMP)
+            RETURNING game_id;
         """
-        print(f"Executing SQL Query (TESTING TABLE ACCESS): {sql}") # Log the query purpose
-        cur.execute(sql) # Execute the simplified query
+        values = (server_instance_id, jsonify(game_settings)) # Store settings as JSONB
+        print(f"Executing SQL Query (INSERT game record): {sql} with values: {values}")
+        cur.execute(sql, values)
 
-        result = cur.fetchone() # Try to fetch a result
-        conn.commit() # Keep commit for now, though not strictly needed for SELECT
-        if result:
-            return result[0] # Return the game_id if found (just indicating table access is OK)
-        else:
-            return "Games table accessible, but no data found (or table empty?)" # Indicate table is accessible
+        game_id = cur.fetchone()[0] # Fetch the returned game_id
+        conn.commit()
+        return game_id # Return the newly created game_id
+
+    except (Exception, psycopg2.Error) as error:
+        print("Error in create_game_record (INSERT):", error)
+        return None # Return None to indicate failure
+
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
 
     except (Exception, psycopg2.Error) as error:
         print("Error in create_game_record (simplified query - TESTING TABLE ACCESS):", error)
