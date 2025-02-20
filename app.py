@@ -128,6 +128,11 @@ def test_db_connection():
     else:
         return jsonify({"status": "Database connection failed"}), 500
 
+@app.route('/hello_test_route', methods=['GET'])
+def hello_test_route():
+    print("Accessed /hello_test_route endpoint!") # Log when this route is hit
+    return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
+    
 def create_game_record(server_instance_id, game_settings):
     """
     (Simplified) Tests accessing the 'games' table.
