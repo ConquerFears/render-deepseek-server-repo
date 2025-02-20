@@ -229,15 +229,15 @@ def test_db_insert():
         game_settings_data = {"difficulty": "easy", "map": "tutorial"} # Example settings
 
         game_id = create_game_record(server_id, game_settings_data)
-        if game_id:
+        if game_id: # Check if game_id is NOT None (meaning success)
             round_id = create_round_record(game_id, 1, "evaluation") # Example round
 
-            if round_id:
+            if round_id: # Check if round_id is NOT None (meaning success)
                 return jsonify({"status": "success", "message": "Game and round records created successfully!", "game_id": game_id, "round_id": round_id})
             else:
-                return jsonify({"status": "error", "message": "Failed to create round record.", "game_id": game_id})
+                return jsonify({"status": "error", "message": "Failed to create round record.", "game_id": game_id}) # round creation failed, but game was created
         else:
-            return jsonify({"status": "error", "message": "Failed to create game record."})
+            return jsonify({"status": "error", "message": "Failed to create game record."}) # game creation failed
 
     except Exception as e:
         print(f"Error in /test_db_insert endpoint: {e}")
