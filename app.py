@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 import google.generativeai as genai
 import psycopg2
 import os
-import psycopg2.extras  # Import psycopg2.extras
 
 app = Flask(__name__)
 
@@ -24,14 +23,13 @@ model = genai.GenerativeModel(
     generation_config=generation_config
 )
 
-DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL from env variable
+DATABASE_URL = os.environ.get("DATABASE_URL")  # Get DATABASE_URL from env variable
 
 def get_db_connection():  # Function to get a database connection
     conn = None
     try:
-        database_url_from_env = os.environ.get("DATABASE_URL") # Get DATABASE_URL again, just to be sure
-        print(f"Attempting to connect to database using DATABASE_URL: {database_url_from_env}") # ADD THIS LINE: Log the DATABASE_URL
-        conn = psycopg2.connect(database_url_from_env)  # Connect using the URL from env
+        print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}") # Log the DATABASE_URL
+        conn = psycopg2.connect(DATABASE_URL)  # Connect using the URL from env
         return conn
     except (Exception, psycopg2.Error) as error:
         print("Error while connecting to PostgreSQL", error)
@@ -41,8 +39,7 @@ def get_db_connection():  # Function to get a database connection
 
 @app.route('/', methods=['GET'])
 def hello_world():
-    database_url_from_env = os.environ.get("DATABASE_URL")
-    print(f"Checking DATABASE_URL in root route: {database_url_from_env}") # Log DATABASE_URL in root route
+    print(f"Checking DATABASE_URL in root route: {DATABASE_URL}") # Log DATABASE_URL in root route
     return 'Hello, World! This is your Render server (now on Fly.io with Postgres!).'
 
 @app.route('/gemini_request', methods=['POST'])
@@ -132,7 +129,7 @@ def test_db_connection():
 def hello_test_route():
     print("Accessed /hello_test_route endpoint!") # Log when this route is hit
     return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
-    
+
 def create_game_record(server_instance_id, game_settings):
     """
     (Simplified) Tests accessing the 'games' table.
