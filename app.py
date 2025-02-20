@@ -104,5 +104,23 @@ def echo_input():
         print(f"Error in /echo endpoint: {e}")
         return "Error processing echo request", 500, {'Content-Type': 'text/plain'}
 
+@app.route('/test_db', methods=['GET'])
+def test_db_connection():
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1;")  # Simple test query
+            result = cur.fetchone() # Fetch the result (should be (1,))
+            cur.close()
+            conn.close()
+            return jsonify({"status": "Database connection successful", "result": result}), 200
+        except (Exception, psycopg2.Error) as db_error:
+            if conn:
+                conn.close()
+            return jsonify({"status": "Database query error", "error": str(db_error)}), 500
+    else:
+        return jsonify({"status": "Database connection failed"}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
