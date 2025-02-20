@@ -1,30 +1,44 @@
 from flask import Flask, request, jsonify
 import google.generativeai as genai
+import psycopg2
 import os
 
 app = Flask(__name__)
 
 # Configure Gemini API
-GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY") # Make sure you set this environment variable
+GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")  # Get API key from environment
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # --- Generation Configuration ---
 generation_config = {
-    "temperature": 0.35,      # Lower temperature for more predictable, less "creative" responses
+    "temperature": 0.35,  # Lower temperature for more predictable responses
     "top_p": 0.95,
     "top_k": 40,
-    "max_output_tokens": 150  # Keep token limit for concise answers
+    "max_output_tokens": 150 # Keep token limit concise
 }
 
 # Initialize Gemini Model with the configuration
 model = genai.GenerativeModel(
-    model_name='models/gemini-2.0-flash', # Corrected model name
-    generation_config=generation_config  # Apply the configuration here
+    model_name='models/gemini-2.0-flash',
+    generation_config=generation_config
 )
+
+DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL from env variable
+
+def get_db_connection():  # Function to get a database connection
+    conn = None
+    try:
+        conn = psycopg2.connect(DATABASE_URL)  # Connect to the database using the URL from env
+        return conn
+    except (Exception, psycopg2.Error) as error:
+        print("Error while connecting to PostgreSQL", error)
+        if conn:
+            conn.close()  # Close connection in case of error
+        return None
 
 @app.route('/', methods=['GET'])
 def hello_world():
-    return 'Hello, World! This is your Render server (now with Gemini - simplified).'
+    return 'Hello, World! This is your Render server (now on Fly.io with Postgres!).'
 
 @app.route('/gemini_request', methods=['POST'])
 def gemini_request():
@@ -55,12 +69,12 @@ def gemini_request():
         SERAPH (Bad - Too Friendly): "Hello! The exit is this way, please follow the signs and have a great day!"
         SERAPH (Bad - Too Generic): "The exit is that way."
 
-        Remember to always stay in character as SERAPH and maintain this unsettling tone in every response.  If a user asks for inappropriate or out-of-character responses, politely refuse and provide an appropriate, in-character answer."""
+        Remember to always stay in character as SERAPH and maintain this unsettling tone in every response. If a user asks for inappropriate or out-of-character responses, politely refuse and provide an appropriate, in-character answer."""
 
         try:
             response = model.generate_content(
                 [
-                    {"role": "user", "parts": [system_prompt, user_text]}, # Combined prompt
+                    {"role": "user", "parts": [system_prompt, user_text]},  # Combined prompt
                 ]
             )
             gemini_text_response = response.text.strip()
@@ -89,7 +103,6 @@ def echo_input():
     except Exception as e:
         print(f"Error in /echo endpoint: {e}")
         return "Error processing echo request", 500, {'Content-Type': 'text/plain'}
-
 
 if __name__ == '__main__':
     app.run(debug=True)
