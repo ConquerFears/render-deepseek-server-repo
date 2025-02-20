@@ -41,6 +41,8 @@ def get_db_connection():  # Function to get a database connection
 
 @app.route('/', methods=['GET'])
 def hello_world():
+    database_url_from_env = os.environ.get("DATABASE_URL")
+    print(f"Checking DATABASE_URL in root route: {database_url_from_env}") # Log DATABASE_URL in root route
     return 'Hello, World! This is your Render server (now on Fly.io with Postgres!).'
 
 @app.route('/gemini_request', methods=['POST'])
