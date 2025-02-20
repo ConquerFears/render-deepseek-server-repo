@@ -170,10 +170,12 @@ def create_game_record(server_instance_id, game_settings):
             cur.close()
             conn.close()
 
-    except (Exception, psycopg2.Error) as error:
-        print("Error in create_game_record (simplified query - TESTING TABLE ACCESS):", error)
-        return "Error accessing games table: " + str(error) # Return error message
-
+    except Exception as error: # Just catch general Exception for now (for testing)
+    if isinstance(error, psycopg2.Error): # Check if it's a psycopg2.Error inside
+        print("psycopg2.Error caught!") # Add a specific log
+    print("Error in create_game_record (INSERT):", error)
+    return None
+    
     finally:
         if conn:
             cur.close()
