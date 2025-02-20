@@ -122,5 +122,108 @@ def test_db_connection():
     else:
         return jsonify({"status": "Database connection failed"}), 500
 
+def create_game_record(server_instance_id, game_settings):
+    """
+    Inserts a new game record into the 'games' table.
+
+    Args:
+        server_instance_id (str): Unique identifier for the game server instance.
+        game_settings (dict): Dictionary of game settings (will be stored as JSONB).
+
+    Returns:
+        int: The game_id of the newly created game record if successful, None on error.
+    """
+    conn = None  # Initialize conn outside try block
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return None  # Could not get database connection
+
+        cur = conn.cursor()
+        sql = """
+            INSERT INTO games (server_instance_id, start_time, game_settings)
+            VALUES (%s, NOW()::TIMESTAMP, %s)
+            RETURNING game_id;
+        """
+        cur.execute(sql, (server_instance_id, psycopg2.extras.Json(game_settings))) # Use psycopg2.extras.Json to store JSON
+
+        game_id = cur.fetchone()[0]  # Get the game_id returned by INSERT ... RETURNING
+        conn.commit()  # Important: Save changes to the database
+        return game_id
+
+    except (Exception, psycopg2.Error) as error:
+        print("Error in create_game_record:", error)
+        return None
+
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
+
+
+    def create_round_record(game_id, round_number, round_type):
+    """
+    Inserts a new round record into the 'rounds' table.
+
+    Args:
+        game_id (int): The game_id of the game this round belongs to.
+        round_number (int): The round number within the game.
+        round_type (str): The type of round (e.g., 'evaluation', 'minigame1').
+
+    Returns:
+        int: The round_id of the newly created round record if successful, None on error.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return None
+
+        cur = conn.cursor()
+        sql = """
+            INSERT INTO rounds (game_id, round_number, round_type, start_time)
+            VALUES (%s, %s, %s, NOW()::TIMESTAMP)
+            RETURNING round_id;
+        """
+        cur.execute(sql, (game_id, round_number, round_type)) # Parameters in order
+
+        round_id = cur.fetchone()[0]
+        conn.commit()
+        return round_id
+
+    except (Exception, psycopg2.Error) as error:
+        print("Error in create_round_record:", error)
+        return None
+
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
+
+
+    @app.route('/test_db_insert', methods=['GET'])
+    def test_db_insert():
+    """
+    Tests the create_game_record and create_round_record functions.
+    """
+    try:
+        server_id = "test-server-instance-123" # Example server ID
+        game_settings_data = {"difficulty": "easy", "map": "tutorial"} # Example settings
+
+        game_id = create_game_record(server_id, game_settings_data)
+        if game_id:
+            round_id = create_round_record(game_id, 1, "evaluation") # Example round
+
+            if round_id:
+                return jsonify({"status": "success", "message": "Game and round records created successfully!", "game_id": game_id, "round_id": round_id})
+            else:
+                return jsonify({"status": "error", "message": "Failed to create round record.", "game_id": game_id})
+        else:
+            return jsonify({"status": "error", "message": "Failed to create game record."})
+
+    except Exception as e:
+        print(f"Error in /test_db_insert endpoint: {e}")
+        return jsonify({"status": "error", "message": f"Error during database insert test: {e}"})
+
 if __name__ == '__main__':
     app.run(debug=True)
