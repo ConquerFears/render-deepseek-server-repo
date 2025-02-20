@@ -29,7 +29,9 @@ DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL
 def get_db_connection():  # Function to get a database connection
     conn = None
     try:
-        conn = psycopg2.connect(DATABASE_URL)  # Connect to the database using the URL from env
+        database_url_from_env = os.environ.get("DATABASE_URL") # Get DATABASE_URL again, just to be sure
+        print(f"Attempting to connect to database using DATABASE_URL: {database_url_from_env}") # ADD THIS LINE: Log the DATABASE_URL
+        conn = psycopg2.connect(database_url_from_env)  # Connect using the URL from env
         return conn
     except (Exception, psycopg2.Error) as error:
         print("Error while connecting to PostgreSQL", error)
