@@ -22,4 +22,4 @@ primary_region = 'iad'
   cpus = 1
 
 [processes] # Define processes section
-  app = "gunicorn app:app --bind :8080 --workers 3" # Command to run gunicorn
+  app = "/app/.venv/bin/gunicorn app:app --bind :8080 --workers 3" # Full path to gunicorn
