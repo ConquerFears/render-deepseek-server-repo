@@ -132,7 +132,7 @@ def hello_test_route():
     print("Accessed /hello_test_route endpoint!") # Log when this route is hit
     return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
 
-def create_game_record(server_instance_id, game_settings):
+def create_game_record(server_instance_id, game_settings_data):
     """
     Inserts a new game record into the 'games' table.
 
@@ -144,10 +144,15 @@ def create_game_record(server_instance_id, game_settings):
         str: The game_id of the newly created game record if successful, None on error.
     """
     conn = None
+    print("create_game_record: Function started")  # ADDED: Function entry log
+
     try:
+        print("create_game_record: Getting DB connection...")  # ADDED: Before connection attempt
         conn = get_db_connection()
         if conn is None:
+            print("create_game_record: DB connection FAILED - get_db_connection returned None") # ADDED: Connection failure log
             return None
+        print("create_game_record: DB connection SUCCESSFUL") # ADDED: Connection success log
 
         cur = conn.cursor()
         sql = """
@@ -155,23 +160,30 @@ def create_game_record(server_instance_id, game_settings):
             VALUES (%s, %s, NOW()::TIMESTAMP)
             RETURNING game_id;
         """
-        values = (server_instance_id, json.dumps(game_settings)) # Store settings as JSON string  <--- FIXED LINE: json.dumps()
-        print(f"Executing SQL Query (INSERT game record): {sql} with values: {values}")
+        values = (server_instance_id, json.dumps(game_settings_data))
+        print(f"create_game_record: Executing SQL Query (INSERT game record): {sql} with values: {values}") # ADDED: Before execute
         cur.execute(sql, values)
+        print("create_game_record: SQL query executed successfully") # ADDED: After execute
 
-        game_id = cur.fetchone()[0] # Fetch the returned game_id
+        game_id = cur.fetchone()[0]
         conn.commit()
-        return game_id # Return the newly created game_id
+        print(f"create_game_record: Commit successful, game_id: {game_id}") # ADDED: After commit
+        return game_id
 
     except (Exception, psycopg2.Error) as error:
-        print("Error in create_game_record (INSERT):", error)
-        return None # Return None to indicate failure
+        print("create_game_record: ERROR in INSERT operation:", error) # MODIFIED: More specific error log
+        return None
 
     finally:
+        print("create_game_record: Entering finally block") # ADDED: Finally block entry log
         if conn:
-            if cur: # Check if cursor exists before closing
+            print("create_game_record: Closing cursor and connection") # ADDED: Before closing
+            if cur:
                 cur.close()
             conn.close()
+        else:
+            print("create_game_record: Connection was None in finally block - nothing to close") # ADDED: Connection was None log
+        print("create_game_record: Exiting finally block") # ADDED: Finally block exit log
 
 def create_round_record(game_id, round_number, round_type):
     """
