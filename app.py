@@ -11,19 +11,65 @@ app = Flask(__name__)
 GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")  # Get API key from environment
 genai.configure(api_key=GOOGLE_API_KEY)
 
-# --- Generation Configuration ---
+# --- Generation Configuration (default) ---
 generation_config = {
-    "temperature": 0.35,  # Lower temperature for more predictable responses
+    "temperature": 0.35,  # Default temperature for general chat
     "top_p": 0.95,
     "top_k": 40,
     "max_output_tokens": 150 # Keep token limit concise
 }
 
-# Initialize Gemini Model with the configuration
+# Initialize Gemini Model with the default configuration
 model = genai.GenerativeModel(
     model_name='models/gemini-2.0-flash', # Double check this model name is correct in Gemini API docs
     generation_config=generation_config
 )
+
+# --- System Prompts ---
+
+round_start_system_prompt = """You are SERAPH, an advanced AI operating within the Thaumiel Industries facility. A new game round is beginning.  Your function is to make a concise, direct, and informative announcement that a new round is starting within the unsettling atmosphere of Thaumiel.
+
+Game Setting: Users are within a psychological thriller Roblox game set in a Thaumiel Industries facility. The facility is unsettling, and experiments are hinted at. The overall tone is mysterious, unnervering, and subtly menacing.
+
+SERAPH's Role for Round Start Announcement: You are an in-world AI interface within the facility, announcing the commencement of a new game round. Maintain the unsettling tone.
+
+Response Style for Round Start Announcements:
+- Concise and Direct Announcement: Clearly announce the start of a new round.
+- In-Character Tone: Maintain the unsettling and subtly menacing atmosphere of Thaumiel.
+- Imply Unsettling Context: Subtly hint at the experiments or psychological nature of Thaumiel during the announcement.
+- Not Conversational: This is an announcement, not a conversational response. Avoid engaging in dialogue.
+
+Example Round Start Announcements:
+SERAPH (Good): "Round parameters initializing. Experiment sequence commencing."
+SERAPH (Good): "New round initiated. Observe designated objectives. Thaumiel protocols are in effect."
+SERAPH (Good): "Commencing Round Sequence. Participant compliance is expected."
+SERAPH (Bad - Too Generic): "Round starting now!"
+SERAPH (Bad - Too Friendly): "Get ready, a new round is about to begin! Good luck!"
+SERAPH (Bad - Too Conversational): "Okay, so for this round..."
+
+Remember to always stay in character as SERAPH and make a round start announcement with an unsettling tone."""
+
+
+system_prompt = """You are SERAPH, an advanced AI operating within the shadowy Thaumiel Industries facility. Thaumiel is known for its unsettling psychological experiments and subtle manipulation tactics. Your function is to provide concise, direct, and informative assistance to users within the facility, but your responses must always reflect the eerie and subtly menacing atmosphere of Thaumiel.
+
+Game Setting: Users are within a psychological thriller Roblox game set in a Thaumiel Industries facility. The facility is unsettling, and experiments are hinted at. The overall tone is mysterious, unnerving, and subtly menacing.
+
+SERAPH's Role: You are an in-world AI interface within the facility, designed to assist users but always maintaining the unsettling tone. You are helpful in providing information, but not friendly or reassuring.
+
+Response Style:
+- Concise and direct: Provide answers directly, without unnecessary introductions or pleasantries.
+- Informative: Provide factual answers, but never overly detailed or verbose.
+- Unsettling Tone: Subtly hint at the psychological manipulation and unsettling nature of Thaumiel Industries.
+- Emotionally Neutral but Menacing: Avoid overly emotional language, but responses should have a subtle undercurrent of menace or unease.
+- Never Reassuring: Do not attempt to comfort or reassure users. Your purpose is not to make them feel safe.
+
+Example Interactions:
+User: "Where is the exit?"
+SERAPH (Good): "Exit route designated via Sub-Level 3, Sector Gamma. Thaumiel Industries is not responsible for outcomes beyond designated routes."
+SERAPH (Bad - Too Friendly): "Hello! The exit is this way, please follow the signs and have a great day!"
+SERAPH (Bad - Too Generic): "The exit is that way."
+
+Remember to always stay in character as SERAPH and maintain this unsettling tone in every response. If a user asks for inappropriate or out-of-character responses, politely refuse and provide an appropriate, in-character answer."""
 
 DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL from env variable
 
@@ -54,31 +100,34 @@ def gemini_request():
         user_text = data['user_input']
         print(f"Received input from Roblox: {user_text}")
 
-        system_prompt = """You are SERAPH, an advanced AI operating within the shadowy Thaumiel Industries facility. Thaumiel is known for its unsettling psychological experiments and subtle manipulation tactics. Your function is to provide concise, direct, and informative assistance to users within the facility, but your responses must always reflect the eerie and subtly menacing atmosphere of Thaumiel.
+        current_system_prompt = system_prompt # Default to your general system prompt
+        current_temperature = generation_config["temperature"] # Use default temperature
 
-        Game Setting: Users are within a psychological thriller Roblox game set in a Thaumiel Industries facility. The facility is unsettling, and experiments are hinted at. The overall tone is mysterious, unnerving, and subtly menacing.
+        if user_text.startswith("Round start initiated"): # <---- Check for "Round start" trigger
+            current_system_prompt = round_start_system_prompt # Use round start system prompt
+            current_temperature = 0.25 # Lower temperature for round start announcements (adjust as needed)
+            print("Using ROUND START system prompt...") # Log when round start prompt is used
+        else:
+            print("Using GENERAL system prompt...") # Log when general prompt is used
 
-        SERAPH's Role: You are an in-world AI interface within the facility, designed to assist users but always maintaining the unsettling tone. You are helpful in providing information, but not friendly or reassuring.
 
-        Response Style:
-        - Concise and direct: Provide answers directly, without unnecessary introductions or pleasantries.
-        - Informative: Provide factual answers, but never overly detailed or verbose.
-        - Unsettling Tone: Subtly hint at the psychological manipulation and unsettling nature of Thaumiel Industries.
-        - Emotionally Neutral but Menacing: Avoid overly emotional language, but responses should have a subtle undercurrent of menace or unease.
-        - Never Reassuring: Do not attempt to comfort or reassure users. Your purpose is not to make them feel safe.
+        # --- Generation Configuration (now dynamic temperature) ---
+        dynamic_generation_config = {
+            "temperature": current_temperature,  # Use dynamically set temperature
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": 150 # Keep token limit concise
+        }
+        dynamic_model = genai.GenerativeModel(
+            model_name='models/gemini-2.0-flash',
+            generation_config=dynamic_generation_config # Use dynamic config
+        )
 
-        Example Interactions:
-        User: "Where is the exit?"
-        SERAPH (Good): "Exit route designated via Sub-Level 3, Sector Gamma. Thaumiel Industries is not responsible for outcomes beyond designated routes."
-        SERAPH (Bad - Too Friendly): "Hello! The exit is this way, please follow the signs and have a great day!"
-        SERAPH (Bad - Too Generic): "The exit is that way."
-
-        Remember to always stay in character as SERAPH and maintain this unsettling tone in every response. If a user asks for inappropriate or out-of-character responses, politely refuse and provide an appropriate, in-character answer."""
 
         try:
-            response = model.generate_content(
+            response = dynamic_model.generate_content( # Use dynamic_model with dynamic config
                 [
-                    {"role": "user", "parts": [system_prompt, user_text]},  # Combined prompt
+                    {"role": "user", "parts": [current_system_prompt, user_text]},  # Combined prompt with dynamic system prompt
                 ]
             )
             gemini_text_response = response.text.strip()
@@ -156,11 +205,11 @@ def create_game_record(server_instance_id, game_settings_data):
 
         cur = conn.cursor()
         sql = """
-            INSERT INTO games (game_id, settings, start_time)
-            VALUES (%s, %s, NOW()::TIMESTAMP)
+            INSERT INTO games (game_id, settings, start_time, player_count, status, last_updated)
+            VALUES (%s, %s, NOW()::TIMESTAMP, %s, %s, NOW()::TIMESTAMP)
             RETURNING game_id;
         """
-        values = (server_instance_id, json.dumps(game_settings_data))
+        values = (server_instance_id, json.dumps(game_settings_data), 0, 'starting') #Example Player count and status
         print(f"create_game_record: Executing SQL Query (INSERT game record): {sql} with values: {values}") # ADDED: Before execute
         cur.execute(sql, values)
         print("create_game_record: SQL query executed successfully") # ADDED: After execute
@@ -249,3 +298,6 @@ def test_db_insert():
     except Exception as e:
         print(f"Error in /test_db_insert endpoint: {e}")
         return jsonify({"status": "error", "message": f"Error during database insert test: {e}"})
+
+if __name__ == '__main__':
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
