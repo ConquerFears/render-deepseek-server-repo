@@ -1,22 +1,32 @@
-# fly.toml app configuration file generated for roblox-gemini-bridge-flask on 2025-02-20T10:07:07-05:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+app = "your-app-name"  # Replace "your-app-name" with the name you chose in step 3
 
-app = 'roblox-gemini-bridge-flask'
-primary_region = 'mia'
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+processes = []
+
+[experimental]
+  allowed_public_ports = []
+  auto_rollback_machines = true
 
 [build]
+  image = "python:3.10-slim-buster" # Or a newer Python version if you prefer
+
+[env]
+  GEMINI_API_KEY = ""  # You will set this later via Fly.io secrets
+  DATABASE_URL = ""    # You will set this later when you create the Postgres database
 
 [http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = 'stop'
+  internal_port = 5000 # Flask defaults to port 5000
+  auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
-  processes = ['app']
-
-[[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
-  cpus = 1
+  processes = ["app"]
+  [http_service.ports]
+    handlers = ["http"]
+    port = 80
+  [[http_service.tcp_checks]]
+    interval = "15s"
+    restart_limit = 0
+    timeout = "2s"
+    port = 5000
