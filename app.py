@@ -127,36 +127,31 @@ def test_db_connection():
 
 def create_game_record(server_instance_id, game_settings):
     """
-    Inserts a new game record into the 'games' table.
-
-    Args:
-        server_instance_id (str): Unique identifier for the game server instance.
-        game_settings (dict): Dictionary of game settings (will be stored as JSONB).
-
-    Returns:
-        int: The game_id of the newly created game record if successful, None on error.
+    (Simplified) Tests accessing the 'games' table.
     """
-    conn = None  # Initialize conn outside try block
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
-            return None  # Could not get database connection
+            return None
 
         cur = conn.cursor()
         sql = """
-            INSERT INTO games (server_instance_id, start_time, game_settings)
-            VALUES (%s, NOW()::TIMESTAMP, %s)
-            RETURNING game_id;
+            SELECT game_id FROM games LIMIT 1;  -- Simplified query: Select game_id, limit 1
         """
-        cur.execute(sql, (server_instance_id, psycopg2.extras.Json(game_settings))) # Use psycopg2.extras.Json to store JSON
+        print(f"Executing SQL Query: {sql}") # Log the query
+        cur.execute(sql) # Execute the simplified query
 
-        game_id = cur.fetchone()[0]  # Get the game_id returned by INSERT ... RETURNING
-        conn.commit()  # Important: Save changes to the database
-        return game_id
+        result = cur.fetchone() # Try to fetch a result
+        conn.commit() # Keep commit for now, though not strictly needed for SELECT
+        if result:
+            return result[0] # Return the game_id if found
+        else:
+            return "Games table accessible, but no data found (or table empty?)" # Indicate table is accessible
 
     except (Exception, psycopg2.Error) as error:
-        print("Error in create_game_record:", error)
-        return None
+        print("Error in create_game_record (simplified query):", error)
+        return "Error accessing games table: " + str(error) # Return error message
 
     finally:
         if conn:
