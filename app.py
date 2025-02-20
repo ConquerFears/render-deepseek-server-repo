@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import google.generativeai as genai
 import psycopg2
 import os
+import json  # <--- IMPORT json MODULE
 from flask import jsonify
 
 app = Flask(__name__)
@@ -154,7 +155,7 @@ def create_game_record(server_instance_id, game_settings):
             VALUES (%s, %s, NOW()::TIMESTAMP)
             RETURNING game_id;
         """
-        values = (server_instance_id, jsonify(game_settings)) # Store settings as JSONB
+        values = (server_instance_id, json.dumps(game_settings)) # Store settings as JSON string  <--- FIXED LINE: json.dumps()
         print(f"Executing SQL Query (INSERT game record): {sql} with values: {values}")
         cur.execute(sql, values)
 
