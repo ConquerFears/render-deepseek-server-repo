@@ -3,7 +3,8 @@ app = "roblox-gemini-bridge-flask"
 kill_signal = "SIGINT"
 kill_timeout = "5s"
 
-processes = []
+[processes]
+  app = "gunicorn app:app --bind :5000 --worker-tmp-dir /dev/shm --workers 3" # Run gunicorn on port 5000
 
 [experimental]
   allowed_public_ports = []
@@ -17,11 +18,11 @@ processes = []
   DATABASE_URL = ""
 
 [http_service]
-  internal_port = 5000
+  internal_port = 5000 # <--- IMPORTANT: Make sure this is 5000
   auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ["app"] # <--- Use the 'app' process defined above
   [http_service.ports]
     handlers = ["http"]
     port = 80

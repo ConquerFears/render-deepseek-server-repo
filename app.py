@@ -228,5 +228,3 @@ def test_db_insert():
         print(f"Error in /test_db_insert endpoint: {e}")
         return jsonify({"status": "error", "message": f"Error during database insert test: {e}"})
 
-if __name__ == '__main__':
-    app.run(debug=True)
