@@ -9,6 +9,9 @@ processes = []
   allowed_public_ports = []
   auto_rollback_machines = true
 
+[build]
+  builder = "paketobuildpacks/builder:base" # Explicitly use Paketo buildpacks
+
 [env]
   GEMINI_API_KEY = ""
   DATABASE_URL = ""
