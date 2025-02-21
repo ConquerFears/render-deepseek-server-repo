@@ -177,16 +177,32 @@ def echo_input():
 
 @app.route('/test_db', methods=['GET'])
 def test_db_connection():
-    print("Entering /test_db route...")  # <--- ADD THIS LINE
+    print("Entering /test_db route... (schema inspection version)")
     conn = get_db_connection()
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute("SELECT 1;")
-            result = cur.fetchone()
+
+            # --- SQL to get column names of 'games' table ---
+            cur.execute("""
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_name   = 'games'
+                  AND table_schema = 'public'; -- Assuming your table is in 'public' schema
+            """)
+            columns_info = cur.fetchall() # Fetch all column names and types
+
+            column_names = [(name, data_type) for name, data_type in columns_info] # Extract column names and types
+
             cur.close()
             conn.close()
-            return jsonify({"status": "Database connection successful", "result": result}), 200
+
+            return jsonify({
+                "status": "Database connection successful",
+                "table_name": "games",
+                "columns": column_names # Return the list of columns found
+            }), 200
+
         except (Exception, psycopg2.Error) as db_error:
             if conn:
                 conn.close()
