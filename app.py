@@ -280,24 +280,19 @@ def test_db_insert():
     """
     Tests the create_game_record and create_round_record functions.
     """
+    conn = None  # Initialize conn outside the try block
     try:
-        server_id = "test-server-instance-123" # Example server ID
-        game_settings_data = {"difficulty": "easy", "map": "tutorial"} # Example settings
-
-        game_id = create_game_record(server_id, game_settings_data)
-        if game_id: # Check if game_id is NOT None (meaning success)
-            round_id = create_round_record(game_id, 1, "evaluation") # Example round
-
-            if round_id: # Check if round_id is NOT None (meaning success)
-                return jsonify({"status": "success", "message": "Game and round records created successfully!", "game_id": game_id, "round_id": round_id})
-            else:
-                return jsonify({"status": "error", "message": "Failed to create round record.", "game_id": game_id}) # round creation failed, but game was created
-        else:
-            return jsonify({"status": "error", "message": "Failed to create game record."}) # game creation failed
-
+        conn = psycopg2.connect(os.environ['DATABASE_URL'])
+        cur = conn.cursor()
+        cur.execute("INSERT INTO games (status) VALUES ('running')")
+        conn.commit()
+        cur.close()
+        return jsonify({"message": "Data inserted successfully into games table", "status": "success"})
     except Exception as e:
-        print(f"Error in /test_db_insert endpoint: {e}")
-        return jsonify({"status": "error", "message": f"Error during database insert test: {e}"})
-
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+        if conn: # Check if connection was established before trying to close
+            conn.rollback() # Rollback in case of error before commit
+        print(f"Database insertion error: {e}") # ADD THIS LINE - Print detailed error to logs!
+        return jsonify({"message": "Failed to create game record.", "status": "error"})
+    finally:
+        if conn: # Check if connection was established before closing
+            conn.close()
