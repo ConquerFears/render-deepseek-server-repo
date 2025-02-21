@@ -140,17 +140,26 @@ def gemini_request():
 
 
         try:
-            response = dynamic_model.generate_content( # Use dynamic_model with dynamic config
+            response = dynamic_model.generate_content(
                 [
-                    {"role": "user", "parts": [current_system_prompt, user_text]},  # Combined prompt with dynamic system prompt
+                    {"role": "user", "parts": [current_system_prompt, user_text]},
                 ]
             )
             gemini_text_response = response.text.strip()
-            print(f"Gemini Response: {gemini_text_response}")
+            print(f"Gemini Response (raw): {response.text}") # Print raw response.text for debugging
+            print(f"Gemini Response (stripped): {gemini_text_response}") # Print stripped response
 
-            # Include game_id in the response data
-            response_data = {"gemini_response": gemini_text_response, "game_id": game_id_response} # Include game_id here
+            # --- ADD FALLBACK RESPONSE IF gemini_text_response IS EMPTY ---
+            if not gemini_text_response: # Check if gemini_text_response is empty or None
+                gemini_text_response = "Round start sequence initiated. Awaiting further instructions..." # Fallback message
+                print("Gemini response was empty. Using fallback response.") # Log fallback usage
+            # --- END FALLBACK RESPONSE ---
+
+
+            # Include game_id in the response data (game_id_response might be None or "DB_ERROR")
+            response_data = {"gemini_response": gemini_text_response, "game_id": game_id_response}
             return gemini_text_response, 200, {'Content-Type': 'text/plain'} # Return plain text
+
         except Exception as gemini_error:
             print(f"Error calling Gemini API: {gemini_error}")
             return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
