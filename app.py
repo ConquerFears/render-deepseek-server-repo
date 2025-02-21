@@ -150,8 +150,7 @@ def gemini_request():
 
             # Include game_id in the response data
             response_data = {"gemini_response": gemini_text_response, "game_id": game_id_response} # Include game_id here
-            return jsonify(response_data), 200, {'Content-Type': 'application/json'} # Return as JSON
-
+            return gemini_text_response, 200, {'Content-Type': 'text/plain'} # Return plain text
         except Exception as gemini_error:
             print(f"Error calling Gemini API: {gemini_error}")
             return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
