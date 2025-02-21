@@ -113,7 +113,7 @@ def gemini_request():
             # --- Create Game Record in Database ---
             server_instance_id = str(uuid.uuid4()) # Generate a unique game_id
             game_settings_data = {"difficulty": "normal", "map": "facility_map_v1"} # Example settings, adjust as needed
-            game_id = create_game_record(server_instance_id, game_settings_data)
+            game_id = create_game_record(server_instance_id)
             if game_id:
                 print(f"Successfully created new game record with game_id: {game_id}")
                 game_id_response = str(game_id) # Convert game_id to string for response
