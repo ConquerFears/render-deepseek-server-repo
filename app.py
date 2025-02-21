@@ -199,58 +199,57 @@ def hello_test_route():
     print("Accessed /hello_test_route endpoint!") # Log when this route is hit
     return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
 
-def create_game_record(server_instance_id, game_settings_data):
+def create_game_record(server_instance_id): # Removed game_settings_data argument as we don't use 'settings' anymore
     """
-    Inserts a new game record into the 'games' table.
+    Inserts a new game record into the 'games' table (simplified schema).
 
     Args:
-        server_instance_id (str): Unique identifier for the server instance.
-        game_settings (dict): Dictionary of game settings (e.g., difficulty, map).
+        server_instance_id (str): Unique identifier for the server instance (game_id).
 
     Returns:
         str: The game_id of the newly created game record if successful, None on error.
     """
     conn = None
-    print("create_game_record: Function started")  # ADDED: Function entry log
+    print("create_game_record: Function started (simplified schema)")  # Updated log message
 
     try:
-        print("create_game_record: Getting DB connection...")  # ADDED: Before connection attempt
+        print("create_game_record: Getting DB connection...")
         conn = get_db_connection()
         if conn is None:
-            print("create_game_record: DB connection FAILED - get_db_connection returned None") # ADDED: Connection failure log
+            print("create_game_record: DB connection FAILED - get_db_connection returned None")
             return None
-        print("create_game_record: DB connection SUCCESSFUL") # ADDED: Connection success log
+        print("create_game_record: DB connection SUCCESSFUL")
 
         cur = conn.cursor()
         sql = """
-            INSERT INTO games (game_id, settings, start_time, player_count, status, last_updated)
-            VALUES (%s, %s, NOW()::TIMESTAMP, %s, %s, NOW()::TIMESTAMP)
+            INSERT INTO games (game_id, start_time, status)  -- Removed 'settings' and 'player_count'
+            VALUES (%s, NOW()::TIMESTAMP, %s)                -- Removed settings parameter and player_count
             RETURNING game_id;
         """
-        values = (server_instance_id, json.dumps(game_settings_data), 0, 'starting') #Example Player count and status
-        print(f"create_game_record: Executing SQL Query (INSERT game record): {sql} with values: {values}") # ADDED: Before execute
+        values = (server_instance_id, 'starting') # Values adjusted to match schema, removed game_settings_data, player_count
+        print(f"create_game_record: Executing SQL Query (INSERT game record - simplified): {sql} with values: {values}") # Updated log message
         cur.execute(sql, values)
-        print("create_game_record: SQL query executed successfully") # ADDED: After execute
+        print("create_game_record: SQL query executed successfully")
 
         game_id = cur.fetchone()[0]
         conn.commit()
-        print(f"create_game_record: Commit successful, game_id: {game_id}") # ADDED: After commit
+        print(f"create_game_record: Commit successful, game_id: {game_id}")
         return game_id
 
     except (Exception, psycopg2.Error) as error:
-        print("create_game_record: ERROR in INSERT operation:", error) # MODIFIED: More specific error log
+        print("create_game_record: ERROR in INSERT operation (simplified schema):", error) # Updated error log
         return None
 
     finally:
-        print("create_game_record: Entering finally block") # ADDED: Finally block entry log
+        print("create_game_record: Entering finally block")
         if conn:
-            print("create_game_record: Closing cursor and connection") # ADDED: Before closing
+            print("create_game_record: Closing cursor and connection")
             if cur:
                 cur.close()
             conn.close()
         else:
-            print("create_game_record: Connection was None in finally block - nothing to close") # ADDED: Connection was None log
-        print("create_game_record: Exiting finally block") # ADDED: Finally block exit log
+            print("create_game_record: Connection was None in finally block - nothing to close")
+        print("create_game_record: Exiting finally block")
 
 def create_round_record(game_id, round_number, round_type):
     """
