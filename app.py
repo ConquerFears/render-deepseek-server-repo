@@ -4,6 +4,7 @@ import psycopg2
 import os
 import json  # <--- IMPORT json MODULE
 from flask import jsonify
+import uuid  # <--- IMPORT UUID MODULE for generating unique game_id
 
 app = Flask(__name__)
 
@@ -102,11 +103,25 @@ def gemini_request():
 
         current_system_prompt = system_prompt # Default to your general system prompt
         current_temperature = generation_config["temperature"] # Use default temperature
+        game_id_response = None # Initialize game_id_response to None
 
         if user_text.startswith("Round start initiated"): # <---- Check for "Round start" trigger
             current_system_prompt = round_start_system_prompt # Use round start system prompt
             current_temperature = 0.25 # Lower temperature for round start announcements (adjust as needed)
             print("Using ROUND START system prompt...") # Log when round start prompt is used
+
+            # --- Create Game Record in Database ---
+            server_instance_id = str(uuid.uuid4()) # Generate a unique game_id
+            game_settings_data = {"difficulty": "normal", "map": "facility_map_v1"} # Example settings, adjust as needed
+            game_id = create_game_record(server_instance_id, game_settings_data)
+            if game_id:
+                print(f"Successfully created new game record with game_id: {game_id}")
+                game_id_response = str(game_id) # Convert game_id to string for response
+            else:
+                print("Failed to create game record in database.")
+                game_id_response = "DB_ERROR" # Indicate DB error in response
+
+
         else:
             print("Using GENERAL system prompt...") # Log when general prompt is used
 
@@ -132,7 +147,10 @@ def gemini_request():
             )
             gemini_text_response = response.text.strip()
             print(f"Gemini Response: {gemini_text_response}")
-            return gemini_text_response, 200, {'Content-Type': 'text/plain'}
+
+            # Include game_id in the response data
+            response_data = {"gemini_response": gemini_text_response, "game_id": game_id_response} # Include game_id here
+            return jsonify(response_data), 200, {'Content-Type': 'application/json'} # Return as JSON
 
         except Exception as gemini_error:
             print(f"Error calling Gemini API: {gemini_error}")
@@ -296,3 +314,6 @@ def test_db_insert():
     finally:
         if conn: # Check if connection was established before closing
             conn.close()
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
