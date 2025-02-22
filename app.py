@@ -6,8 +6,8 @@ import json  # <--- IMPORT json MODULE
 from flask import jsonify
 import uuid  # <--- IMPORT UUID MODULE for generating unique game_id
 import traceback  # ADD THIS at the top of app.py
-import time # Import time module
-
+import time  # Import time module
+import datetime  # Import datetime for timestamp
 
 app = Flask(__name__)
 
@@ -78,12 +78,12 @@ Remember to always stay in character as SERAPH and maintain this unsettling tone
 DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL from env variable
 
 # --- Rate Limiting Configuration ---
-REQUEST_LIMIT_SECONDS = 1 #  1 request per second. Adjust as needed.
+REQUEST_LIMIT_SECONDS = 1  # 1 request per second. Adjust as needed.
 last_request_time = 0  # Initialize last_request_time at module level
 
 # --- Caching Configuration ---
-response_cache = {} # Initialize cache at module level
-CACHE_EXPIRY_SECONDS = 60 * 5 # 5 minutes cache expiry
+response_cache = {}  # Initialize cache at module level
+CACHE_EXPIRY_SECONDS = 60 * 5  # 5 minutes cache expiry
 
 
 def get_db_connection():  # Function to get a database connection
@@ -97,6 +97,7 @@ def get_db_connection():  # Function to get a database connection
         if conn:
             conn.close()  # Close connection in case of error
         return None
+
 
 def create_dynamic_gemini_model(temperature):
     """
@@ -120,9 +121,10 @@ def hello_world():
     print(f"Checking DATABASE_URL in root route: {DATABASE_URL}")  # Log DATABASE_URL in root route
     return 'Hello, World! This is your Fly.io server with Postgres!'  # Updated message
 
+
 @app.route('/gemini_request', methods=['POST'])
 def gemini_request():
-    global last_request_time # Declare last_request_time as global to modify the module-level variable
+    global last_request_time  # Declare last_request_time as global to modify the module-level variable
 
     try:
         data = request.get_json()
@@ -139,7 +141,6 @@ def gemini_request():
             print(f"Blocked short, generic query: '{user_text}', no Gemini call.")
             return "SERAPH: Greetings.", 200, {'Content-Type': 'text/plain'}  # Canned response
 
-
         print(f"Received input from Roblox: {user_text}")
 
         current_system_prompt = system_prompt
@@ -155,7 +156,6 @@ def gemini_request():
             # --- Database record creation is now handled by /game_start_signal ---
             print("/gemini_request (Round Start): Database record creation is handled by /game_start_signal endpoint.")
 
-
             # --- Caching Logic --- (No changes here - still correct in your code)
             cache_key = user_text  # Simple cache key
             cached_response_data = response_cache.get(cache_key)
@@ -165,7 +165,6 @@ def gemini_request():
                 gemini_text_response = cached_response_data['response']
                 return gemini_text_response, 200, {'Content-Type': 'text/plain'}  # Return cached response
 
-
             # --- Rate Limiting Logic --- (Corrected to use module-level last_request_time)
             current_time = time.time()
             time_since_last_request = current_time - last_request_time
@@ -173,7 +172,6 @@ def gemini_request():
                 print("Request throttled - waiting before Gemini API call.")
                 time.sleep(REQUEST_LIMIT_SECONDS - time_since_last_request)
             last_request_time = current_time  # Update last request time (module-level variable)
-
 
             # --- Gemini API Call --- (No changes here - still correct in your code)
             dynamic_model = create_dynamic_gemini_model(current_temperature)
@@ -196,13 +194,11 @@ def gemini_request():
                 }
                 print(f"Caching new response for: {user_text}")
 
-
                 return gemini_text_response, 200, {'Content-Type': 'text/plain', 'Content-Length': str(len(gemini_text_response))}
 
             except Exception as gemini_error:
                 print(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}")
                 return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
-
 
         else:  # --- GENERAL PROMPT PATH --- (No changes in ELSE path - still correct in your code)
             print("Using GENERAL system prompt...")
@@ -224,6 +220,7 @@ def gemini_request():
     except Exception as e:
         print(f"Error processing request: {e}")
         return "Internal server error", 500, {'Content-Type': 'text/plain'}
+
 
 @app.route('/game_start_signal', methods=['POST'])
 def game_start_signal():
@@ -250,9 +247,17 @@ def game_start_signal():
             print("Failed to create game record in database.")
             return "Database error - failed to create game record.", 500, {'Content-Type': 'text/plain'}
     except Exception as e:
-        print(f"game_start_signal: ERROR processing /game_start_signal request: {e}")  # General error log
-        print(f"game_start_signal: Full Exception details: {traceback.format_exc()}")  # <---- ADDED: Full traceback logging
+        error_message = f"game_start_signal: ERROR processing /game_start_signal request: {e}"
+        full_trace = traceback.format_exc()
+        print(error_message)  # Still print the basic error
+        print(f"game_start_signal: Full Traceback:\n{full_trace}")  # Print full traceback <--- NEW: Explicitly print with newline
+
+        # --- ALSO, explicitly log to stderr (might be less likely to be truncated by Fly.io) ---
+        import sys
+        print(error_message, file=sys.stderr)
+        print(f"game_start_signal: Full Traceback (to stderr):\n{full_trace}", file=sys.stderr)
         return "Internal server error processing game start signal.", 500, {'Content-Type': 'text/plain'}
+
 
 @app.route('/echo', methods=['POST'])
 def echo_input():  # ... (rest of echo_input function - no changes - still correct in your code) ...
@@ -268,6 +273,7 @@ def echo_input():  # ... (rest of echo_input function - no changes - still corre
     except Exception as e:
         print(f"Error in /echo endpoint: {e}")
         return "Error processing echo request", 500, {'Content-Type': 'text/plain'}
+
 
 @app.route('/test_db', methods=['GET'])
 def test_db_connection():  # ... (rest of test_db_connection - no changes - still correct in your code) ...
@@ -294,59 +300,59 @@ def test_db_connection():  # ... (rest of test_db_connection - no changes - stil
     else:
         return jsonify({"status": "Database connection failed"}), 500
 
+
 @app.route('/hello_test_route', methods=['GET'])
 def hello_test_route():  # ... (rest of hello_test_route - no changes - still correct in your code) ...
     print("Accessed /hello_test_route endpoint!")
     return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
 
+
 def create_game_record(server_instance_id, player_usernames_list):
     conn = None
-    print("create_game_record: Function started (simplified schema, with usernames)")  # Updated log
-
     try:
-        print("create_game_record: Getting DB connection...")
         conn = get_db_connection()
         if conn is None:
-            print("create_game_record: DB connection FAILED - get_db_connection returned None")
+            print("DB connection FAILED")  # Essential log
             return None
-        print("create_game_record: DB connection SUCCESSFUL")
-
         cur = conn.cursor()
 
-        # --- Convert list of usernames to comma-separated string ---
-        player_usernames_str = ','.join(player_usernames_list)  # NEW - Join usernames into string
-        print(f"create_game_record: Player usernames string: {player_usernames_str}")  # Log the username string
-
+        player_usernames_str = ','.join(player_usernames_list)
         sql = """
-            INSERT INTO games (game_id, start_time, status, player_usernames)  -- Added player_usernames column
-            VALUES (%s, %s, %s, %s)                      -- Added %s placeholder for usernames
+            INSERT INTO games (game_id, start_time, status, player_usernames)
+            VALUES (%s, %s, %s, %s)
             RETURNING game_id;
         """
-        # --- CORRECTED VALUES TUPLE - NOW WITH 4 VALUES ---
-        values = (server_instance_id, "NOW()", 'starting', player_usernames_str)  # Values now include 4 values: game_id, start_time, status, usernames
-        print(f"create_game_record: Executing SQL Query (INSERT game record - with usernames): {sql} with values: {values}")  # Updated log
+        current_time_utc = datetime.datetime.now(datetime.timezone.utc)
+        values = (server_instance_id, current_time_utc, 'starting', player_usernames_str)
+
         cur.execute(sql, values)
-        print("create_game_record: SQL query executed successfully (with usernames)")
+
+        if cur.rowcount == 0:  # Row count check
+            error_msg = f"INSERT failed, 0 rows affected. Status: {cur.statusmessage}"
+            print(error_msg)  # Essential error log
+            conn.rollback()
+            return None
 
         game_id = cur.fetchone()[0]
         conn.commit()
-        print(f"create_game_record: Commit successful, game_id: {game_id} (with usernames)")
         return game_id
 
     except (Exception, psycopg2.Error) as error:
-        print("create_game_record: ERROR in INSERT operation (with usernames):", error)  # Updated error log
+        error_msg = f"DB INSERT error: {error}"
+        full_trace = traceback.format_exc()
+        print(error_msg)  # Essential error log
+        print(f"Full Traceback:\n{full_trace}")  # Essential traceback log (STDOUT)
+        print(error_msg, file=sys.stderr)  # Essential error log (STDERR)
+        print(f"Full Traceback (stderr):\n{full_trace}", file=sys.stderr)  # Essential traceback log (STDERR)
+        if conn:
+            conn.rollback()
         return None
 
     finally:
-        print("create_game_record: Entering finally block (with usernames)")
         if conn:
-            print("create_game_record: Closing cursor and connection (with usernames)")
             if cur:
                 cur.close()
             conn.close()
-        else:
-            print("create_game_record: Connection was None in finally block (with usernames) - nothing to close")
-        print("create_game_record: Exiting finally block (with usernames)")
 
 
 def create_round_record(game_id, round_number, round_type):  # ... (rest of create_round_record - no changes - still correct in your code) ...
