@@ -312,54 +312,41 @@ def create_game_record(server_instance_id, player_usernames_list):
     try:
         conn = get_db_connection()
         if conn is None:
-            print("DB connection FAILED") # Essential log
-            return False # Return False on failure
-
+            print("DB connection FAILED")  # Essential log
+            return None
         cur = conn.cursor()
 
         player_usernames_str = ','.join(player_usernames_list)
         sql = """
             INSERT INTO games (game_id, start_time, status, player_usernames)
-            VALUES (%s, %s, %s, %s); -- REMOVED RETURNING game_id
+            VALUES (%s, %s, %s, %s)
+            RETURNING game_id;
         """
         current_time_utc = datetime.datetime.now(datetime.timezone.utc)
         values = (server_instance_id, current_time_utc, 'starting', player_usernames_str)
 
-        print(f"create_game_record: Executing SQL Query (INSERT game record - NO RETURNING): {sql} with values: {values}")
         cur.execute(sql, values)
-        print("create_game_record: SQL query executed successfully (NO RETURNING)")
 
-
-        if cur.rowcount == 0: # Row count check
+        if cur.rowcount == 0:  # Row count check
             error_msg = f"INSERT failed, 0 rows affected. Status: {cur.statusmessage}"
-            print(error_msg) # Essential error log
+            print(error_msg)  # Essential error log
             conn.rollback()
-            return False # Return False on failure
+            return None
 
-        # --- Get the return value of fetchone before indexing ---
-        fetch_one_result = cur.fetchone()
-        print(f"create_game_record: cur.fetchone() result: {fetch_one_result}") # Log the result
-
-        if fetch_one_result: # Check if it's not None before indexing
-            game_id = fetch_one_result[0] # Still try to fetch - even though we removed returning clause in SQL to check what happens
-            conn.commit()
-            print(f"create_game_record: Commit successful (NO RETURNING test), game_id retrieved (though might be None now): {game_id}")
-            return True # Return True on (partial) success - INSERT worked
-        else:
-            print("create_game_record: WARNING: cur.fetchone() returned None or empty. INSERT likely succeeded but no game_id retrieved (due to no RETURNING).")
-            conn.commit() # Commit even if no game_id retrieved - INSERT itself might be fine.
-            return True # Return True as INSERT was likely successful
+        game_id = cur.fetchone()[0]
+        conn.commit()
+        return game_id
 
     except (Exception, psycopg2.Error) as error:
         error_msg = f"DB INSERT error: {error}"
         full_trace = traceback.format_exc()
-        print(error_msg) # Essential error log
-        print(f"Full Traceback:\n{full_trace}") # Essential traceback log (STDOUT)
-        print(error_msg, file=sys.stderr) # Essential error log (STDERR)
-        print(f"Full Traceback (stderr):\n{full_trace}", file=sys.stderr) # Essential traceback log (STDERR)
+        print(error_msg)  # Essential error log
+        print(f"Full Traceback:\n{full_trace}")  # Essential traceback log (STDOUT)
+        print(error_msg, file=sys.stderr)  # Essential error log (STDERR)
+        print(f"Full Traceback (stderr):\n{full_trace}", file=sys.stderr)  # Essential traceback log (STDERR)
         if conn:
             conn.rollback()
-        return False # Return False on error
+        return None
 
     finally:
         if conn:
