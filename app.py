@@ -225,39 +225,38 @@ def gemini_request():
 @app.route('/game_start_signal', methods=['POST'])
 def game_start_signal():
     """
-    Endpoint to handle game start signals from Roblox Lobby.
-    Creates a new game record in the database.
-    Does NOT interact with Gemini AI.
+    TEMPORARY: Always returns 200 OK for Roblox testing, regardless of DB operation.
     """
     try:
         data = request.get_json()
         if not data or 'user_input' not in data or 'player_usernames' not in data:
-            return "Invalid request body - missing 'user_input' or 'player_usernames'", 400, {'Content-Type': 'text/plain'}
+            print("game_start_signal: Invalid request body") # Log invalid body, but still return 200
+            return "Game start signal received (Invalid body, but 200 OK for Roblox test)", 200, {'Content-Type': 'text/plain'}
 
-        user_input = data['user_input'].strip()  # For logging purposes, though not used for AI
+
+        user_input = data['user_input'].strip()
         player_usernames_list_from_roblox = data.get('player_usernames', [])
-        print(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}")  # Log usernames
+        print(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}")
 
         server_instance_id = str(uuid.uuid4())
-        game_id = create_game_record(server_instance_id, player_usernames_list_from_roblox)
-        if game_id:
-            print(f"Successfully created game record for game_id: {game_id}")
-            return "Game start signal processed and database record created.", 200, {'Content-Type': 'text/plain'}
+        game_record_created = create_game_record(server_instance_id, player_usernames_list_from_roblox) # Call DB function, but ignore result for now
+
+        if game_record_created: # Even if DB fails, still say "processed" for Roblox test.
+            print(f"game_start_signal: Game record creation attempt COMPLETED (status not checked internally for Roblox test)")
+            return "Game start signal processed (DB record attempt completed, 200 OK for Roblox test)", 200, {'Content-Type': 'text/plain'}
         else:
-            print("Failed to create game record in database.")
-            return "Database error - failed to create game record.", 500, {'Content-Type': 'text/plain'}
+            print("game_start_signal: Game record creation attempt FAILED (but 200 OK for Roblox test)") # Log failure, but still 200
+            return "Game start signal processed (DB record attempt FAILED, but 200 OK for Roblox test)", 200, {'Content-Type': 'text/plain'}
+
+
     except Exception as e:
         error_message = f"game_start_signal: ERROR processing /game_start_signal request: {e}"
         full_trace = traceback.format_exc()
-        print(error_message)  # Still print the basic error
-        print(f"game_start_signal: Full Traceback:\n{full_trace}")  # Print full traceback <--- NEW: Explicitly print with newline
-
-        # --- ALSO, explicitly log to stderr (might be less likely to be truncated by Fly.io) ---
-        import sys
+        print(error_message)
+        print(f"game_start_signal: Full Traceback:\n{full_trace}")
         print(error_message, file=sys.stderr)
-        print(f"game_start_signal: Full Traceback (to stderr):\n{full_trace}", file=sys.stderr)
-        return "Internal server error processing game start signal.", 500, {'Content-Type': 'text/plain'}
-
+        print(f"game_start_signal: Full Traceback (stderr):\n{full_trace}", file=sys.stderr)
+        return "Game start signal endpoint encountered an INTERNAL SERVER ERROR (but TEMPORARILY returning 200 OK for Roblox testing - check server logs)", 200, {'Content-Type': 'text/plain'} # Still return 200 for Roblox test - CRITICAL: Check server logs for real error!
 
 @app.route('/echo', methods=['POST'])
 def echo_input():  # ... (rest of echo_input function - no changes - still correct in your code) ...
