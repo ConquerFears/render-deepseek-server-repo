@@ -225,13 +225,12 @@ def gemini_request():
 @app.route('/game_start_signal', methods=['POST'])
 def game_start_signal():
     """
-    TEMPORARY: Always returns 200 OK for Roblox testing, regardless of DB operation.
+    TEMPORARY: Simplest possible 200 OK response for Roblox testing.
+    Returning application/json now.
+    No database interaction, minimal logic.
     """
-    try:
-        data = request.get_json()
-        if not data or 'user_input' not in data or 'player_usernames' not in data:
-            print("game_start_signal: Invalid request body") # Log invalid body, but still return 200
-            return "Game start signal received (Invalid body, but 200 OK for Roblox test)", 200, {'Content-Type': 'text/plain'}
+    print("game_start_signal: Endpoint REACHED (Simplified JSON Response Test)") # Log that endpoint was hit
+    return jsonify({"status": "success", "message": "Game start signal processed - JSON"}), 200, {'Content-Type': 'application/json'} # Return JSON
 
 
         user_input = data['user_input'].strip()
