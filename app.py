@@ -112,7 +112,6 @@ def gemini_request():
 
             # --- Create Game Record in Database ---
             server_instance_id = str(uuid.uuid4()) # Generate a unique game_id
-            game_settings_data = {"difficulty": "normal", "map": "facility_map_v1"} # Example settings, adjust as needed
             game_id = create_game_record(server_instance_id)
             if game_id:
                 print(f"Successfully created new game record with game_id: {game_id}")
@@ -132,30 +131,34 @@ def gemini_request():
                 model_name='models/gemini-2.0-flash',
                 generation_config=dynamic_generation_config
             )
+            print("gemini_request (Round Start): Calling dynamic_model.generate_content...") # *** LOG BEFORE API CALL (Round Start) ***
             try:
                 response = dynamic_model.generate_content(
                     [
                         {"role": "user", "parts": [current_system_prompt, user_text]},
                     ]
                 )
+                print("gemini_request (Round Start): dynamic_model.generate_content call RETURNED.") # *** LOG AFTER API CALL (Round Start) ***
+                print(f"gemini_request (Round Start): Raw response.text: {response.text}") # *** LOG RAW response.text (Round Start) ***
                 gemini_text_response = response.text.strip()
-                print(f"Gemini Response (Round Start): {gemini_text_response}") # Log round start response
+                print(f"gemini_request (Round Start): Gemini Response (Stripped): {gemini_text_response}") # Log round start response
+                print("gemini_request (Round Start): About to return response.") # *** LOG BEFORE RETURN (Round Start) ***
                 return gemini_text_response, 200, {'Content-Type': 'text/plain'} # RETURN RESPONSE HERE!
 
             except Exception as gemini_error:
-                print(f"Error calling Gemini API (Round Start): {gemini_error}")
+                print(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}") # *** LOG ERROR AGAIN (Round Start) ***
                 return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
 
 
-        else: # --- GENERAL PROMPT PATH (Correctly generates and returns response) ---
-            print("Using GENERAL system prompt...") # Log when general prompt is used
-            dynamic_generation_config = { # Generation config for general prompts
+        else: # --- GENERAL PROMPT PATH (Hopefully working, but keep existing logs) ---
+            print("Using GENERAL system prompt...")
+            dynamic_generation_config = {
                 "temperature": current_temperature,
                 "top_p": 0.95,
                 "top_k": 40,
                 "max_output_tokens": 150
             }
-            dynamic_model = genai.GenerativeModel( # Initialize model for general prompts
+            dynamic_model = genai.GenerativeModel(
                 model_name='models/gemini-2.0-flash',
                 generation_config=dynamic_generation_config
             )
@@ -166,8 +169,8 @@ def gemini_request():
                     ]
                 )
                 gemini_text_response = response.text.strip()
-                print(f"Gemini Response (General): {gemini_text_response}") # Log general response
-                return gemini_text_response, 200, {'Content-Type': 'text/plain'} # RETURN RESPONSE HERE!
+                print(f"Gemini Response (General): {gemini_text_response}")
+                return gemini_text_response, 200, {'Content-Type': 'text/plain'}
 
             except Exception as gemini_error:
                 print(f"Error calling Gemini API (General): {gemini_error}")
