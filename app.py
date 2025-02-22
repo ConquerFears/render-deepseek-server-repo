@@ -132,27 +132,16 @@ def gemini_request():
 
         current_system_prompt = system_prompt
         current_temperature = generation_config["temperature"]
-        game_id_response = None
+        game_id_response = None # No longer used here for database record in /gemini_request
 
         if user_text.startswith("Round start initiated"):
             current_system_prompt = round_start_system_prompt
             current_temperature = 0.25
             print("Using ROUND START system prompt...")
 
-            # --- EXTRACT PLAYER USERNAMES from request data ---
-            player_usernames_list_from_roblox = data.get('player_usernames', []) # Get usernames from request, default to empty list if not present
-            print(f"gemini_request (Round Start): Player usernames received from Roblox: {player_usernames_list_from_roblox}") # Log received usernames
-
-
-            server_instance_id = str(uuid.uuid4())
-            # --- PASS player_usernames_list to create_game_record ---
-            game_id = create_game_record(server_instance_id, player_usernames_list_from_roblox) # <--- Pass usernames here!
-            if game_id:
-                print(f"Successfully created new game record with game_id: {game_id}")
-                game_id_response = str(game_id)
-            else:
-                print("Failed to create game record in database.")
-                game_id_response = "DB_ERROR"
+            # --- No database record creation in /gemini_request anymore ---
+            # --- Database record creation is now handled by /game_start_signal ---
+            print("/gemini_request (Round Start): Database record creation is handled by /game_start_signal endpoint.")
 
 
             # --- Caching Logic --- (No changes here)
@@ -223,6 +212,35 @@ def gemini_request():
     except Exception as e:
         print(f"Error processing request: {e}")
         return "Internal server error", 500, {'Content-Type': 'text/plain'}
+
+@app.route('/game_start_signal', methods=['POST'])
+def game_start_signal():
+    """
+    Endpoint to handle game start signals from Roblox Lobby.
+    Creates a new game record in the database.
+    Does NOT interact with Gemini AI.
+    """
+    try:
+        data = request.get_json()
+        if not data or 'user_input' not in data or 'player_usernames' not in data:
+            return "Invalid request body - missing 'user_input' or 'player_usernames'", 400, {'Content-Type': 'text/plain'}
+
+        user_input = data['user_input'].strip() # For logging purposes, though not used for AI
+        player_usernames_list_from_roblox = data.get('player_usernames', [])
+        print(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}") # Log usernames
+
+        server_instance_id = str(uuid.uuid4())
+        game_id = create_game_record(server_instance_id, player_usernames_list_from_roblox)
+        if game_id:
+            print(f"Successfully created game record for game_id: {game_id}")
+            return "Game start signal processed and database record created.", 200, {'Content-Type': 'text/plain'}
+        else:
+            print("Failed to create game record in database.")
+            return "Database error - failed to create game record.", 500, {'Content-Type': 'text/plain'}
+
+    except Exception as e:
+        print(f"Error processing /game_start_signal request: {e}")
+        return "Internal server error processing game start signal.", 500, {'Content-Type': 'text/plain'}
 
 @app.route('/echo', methods=['POST'])
 def echo_input(): # ... (rest of echo_input function - no changes) ...
