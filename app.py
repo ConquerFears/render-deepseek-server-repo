@@ -5,6 +5,8 @@ import os
 import json  # <--- IMPORT json MODULE
 from flask import jsonify
 import uuid  # <--- IMPORT UUID MODULE for generating unique game_id
+import traceback # ADD THIS at the top of app.py
+
 
 app = Flask(__name__)
 
@@ -237,9 +239,9 @@ def game_start_signal():
         else:
             print("Failed to create game record in database.")
             return "Database error - failed to create game record.", 500, {'Content-Type': 'text/plain'}
-
     except Exception as e:
-        print(f"Error processing /game_start_signal request: {e}")
+        print(f"game_start_signal: ERROR processing /game_start_signal request: {e}") # General error log
+        print(f"game_start_signal: Full Exception details: {traceback.format_exc()}") # <---- ADDED: Full traceback logging
         return "Internal server error processing game start signal.", 500, {'Content-Type': 'text/plain'}
 
 @app.route('/echo', methods=['POST'])
