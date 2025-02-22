@@ -12,7 +12,7 @@ app = Flask(__name__)
 GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")  # Get API key from environment
 genai.configure(api_key=GOOGLE_API_KEY)
 
-# --- Generation Configuration (default) ---
+# --- Default Generation Configuration ---
 generation_config = {
     "temperature": 0.35,  # Default temperature for general chat
     "top_p": 0.95,
@@ -21,8 +21,8 @@ generation_config = {
 }
 
 # Initialize Gemini Model with the default configuration
-model = genai.GenerativeModel(
-    model_name='models/gemini-2.0-flash', # Double check this model name is correct in Gemini API docs
+default_model = genai.GenerativeModel( # Renamed to default_model for clarity
+    model_name='models/gemini-2.0-flash',
     generation_config=generation_config
 )
 
@@ -86,6 +86,23 @@ def get_db_connection():  # Function to get a database connection
             conn.close()  # Close connection in case of error
         return None
 
+def create_dynamic_gemini_model(temperature):
+    """
+    Creates a dynamic Gemini model with the specified temperature.
+    Reduces code duplication in gemini_request function.
+    """
+    dynamic_generation_config = {
+        "temperature": temperature,
+        "top_p": 0.95,
+        "top_k": 40,
+        "max_output_tokens": 150
+    }
+    return genai.GenerativeModel(
+        model_name='models/gemini-2.0-flash',
+        generation_config=dynamic_generation_config
+    )
+
+
 @app.route('/', methods=['GET'])
 def hello_world():
     print(f"Checking DATABASE_URL in root route: {DATABASE_URL}") # Log DATABASE_URL in root route
@@ -121,16 +138,7 @@ def gemini_request():
                 game_id_response = "DB_ERROR" # Indicate DB error in response
 
             # --- GENERATE GEMINI RESPONSE FOR ROUND START AND RETURN IT ---
-            dynamic_generation_config = { # Create generation config HERE for round start
-                "temperature": current_temperature,
-                "top_p": 0.95,
-                "top_k": 40,
-                "max_output_tokens": 150
-            }
-            dynamic_model = genai.GenerativeModel( # Initialize model HERE for round start
-                model_name='models/gemini-2.0-flash',
-                generation_config=dynamic_generation_config
-            )
+            dynamic_model = create_dynamic_gemini_model(current_temperature) # Using function for model creation
             print("gemini_request (Round Start): Calling dynamic_model.generate_content...") # *** LOG BEFORE API CALL (Round Start) ***
             try:
                 response = dynamic_model.generate_content(
@@ -150,18 +158,9 @@ def gemini_request():
                 return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
 
 
-        else: # --- GENERAL PROMPT PATH (Hopefully working, but keep existing logs) ---
+        else: # --- GENERAL PROMPT PATH ---
             print("Using GENERAL system prompt...")
-            dynamic_generation_config = {
-                "temperature": current_temperature,
-                "top_p": 0.95,
-                "top_k": 40,
-                "max_output_tokens": 150
-            }
-            dynamic_model = genai.GenerativeModel(
-                model_name='models/gemini-2.0-flash',
-                generation_config=dynamic_generation_config
-            )
+            dynamic_model = create_dynamic_gemini_model(current_temperature) # Using function for model creation
             try:
                 response = dynamic_model.generate_content(
                     [
