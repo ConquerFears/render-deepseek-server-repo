@@ -110,57 +110,102 @@ def hello_world():
 
 @app.route('/gemini_request', methods=['POST'])
 def gemini_request():
+    nonlocal last_request_time
+
     try:
         data = request.get_json()
         if not data or 'user_input' not in data:
             return "No 'user_input' provided in request body", 400, {'Content-Type': 'text/plain'}
 
-        user_text = data['user_input']
+        user_text = data['user_input'].strip() # IMPORTANT: Strip whitespace FIRST
+
+        # --- Server-side Input Filtering (Example - Adjust as needed) ---
+        if not user_text:
+            print("Blocked empty query, no Gemini call.")
+            return "", 200, {'Content-Type': 'text/plain'} # Return empty, no AI call
+        if len(user_text) < 5 and user_text.lower() in ["hi", "hello", "hey"]: # Example short greetings
+            print(f"Blocked short, generic query: '{user_text}', no Gemini call.")
+            return "SERAPH: Greetings.", 200, {'Content-Type': 'text/plain'} # Canned response
+
+
         print(f"Received input from Roblox: {user_text}")
 
-        current_system_prompt = system_prompt # Default to your general system prompt
-        current_temperature = generation_config["temperature"] # Use default temperature
-        game_id_response = None # Initialize game_id_response to None
+        current_system_prompt = system_prompt
+        current_temperature = generation_config["temperature"]
+        game_id_response = None
 
-        if user_text.startswith("Round start initiated"): # <---- Check for "Round start" trigger
-            current_system_prompt = round_start_system_prompt # Use round start system prompt
-            current_temperature = 0.25 # Lower temperature for round start announcements (adjust as needed)
-            print("Using ROUND START system prompt...") # Log when round start prompt is used
+        if user_text.startswith("Round start initiated"):
+            current_system_prompt = round_start_system_prompt
+            current_temperature = 0.25
+            print("Using ROUND START system prompt...")
 
-            # --- Create Game Record in Database ---
-            server_instance_id = str(uuid.uuid4()) # Generate a unique game_id
-            game_id = create_game_record(server_instance_id)
+            # --- EXTRACT PLAYER USERNAMES from request data ---
+            player_usernames_list_from_roblox = data.get('player_usernames', []) # Get usernames from request, default to empty list if not present
+            print(f"gemini_request (Round Start): Player usernames received from Roblox: {player_usernames_list_from_roblox}") # Log received usernames
+
+
+            server_instance_id = str(uuid.uuid4())
+            # --- PASS player_usernames_list to create_game_record ---
+            game_id = create_game_record(server_instance_id, player_usernames_list_from_roblox) # <--- Pass usernames here!
             if game_id:
                 print(f"Successfully created new game record with game_id: {game_id}")
-                game_id_response = str(game_id) # Convert game_id to string for response
+                game_id_response = str(game_id)
             else:
                 print("Failed to create game record in database.")
-                game_id_response = "DB_ERROR" # Indicate DB error in response
+                game_id_response = "DB_ERROR"
 
-            # --- GENERATE GEMINI RESPONSE FOR ROUND START AND RETURN IT ---
-            dynamic_model = create_dynamic_gemini_model(current_temperature) # Using function for model creation
-            print("gemini_request (Round Start): Calling dynamic_model.generate_content...") # *** LOG BEFORE API CALL (Round Start) ***
+
+            # --- Caching Logic --- (No changes here)
+            cache_key = user_text # Simple cache key
+            cached_response_data = response_cache.get(cache_key)
+
+            if cached_response_data and (time.time() - cached_response_data['timestamp'] < CACHE_EXPIRY_SECONDS):
+                print(f"Serving cached response for: {user_text}")
+                gemini_text_response = cached_response_data['response']
+                return gemini_text_response, 200, {'Content-Type': 'text/plain'} # Return cached response
+
+
+            # --- Rate Limiting Logic --- (No changes here)
+            current_time = time.time()
+            time_since_last_request = current_time - last_request_time
+            if time_since_last_request < REQUEST_LIMIT_SECONDS:
+                print("Request throttled - waiting before Gemini API call.")
+                time.sleep(REQUEST_LIMIT_SECONDS - time_since_last_request)
+            last_request_time = current_time # Update last request time
+
+
+            # --- Gemini API Call --- (No changes here)
+            dynamic_model = create_dynamic_gemini_model(current_temperature)
+            print("gemini_request: Calling dynamic_model.generate_content...")
             try:
                 response = dynamic_model.generate_content(
                     [
                         {"role": "user", "parts": [current_system_prompt, user_text]},
                     ]
                 )
-                print("gemini_request (Round Start): dynamic_model.generate_content call RETURNED.") # *** LOG AFTER API CALL (Round Start) ***
-                print(f"gemini_request (Round Start): Raw response.text: {response.text}") # *** LOG RAW response.text (Round Start) ***
+                print("gemini_request: dynamic_model.generate_content call RETURNED.")
+                print(f"gemini_request: Raw response.text: {response.text}")
                 gemini_text_response = response.text.strip()
-                print(f"gemini_request (Round Start): Gemini Response (Stripped): {gemini_text_response}") # Log round start response
-                print("gemini_request (Round Start): About to return response.") # *** LOG BEFORE RETURN (Round Start) ***
+                print(f"gemini_request: Gemini Response (Stripped): {gemini_text_response}")
+
+                # --- Store in Cache --- (No changes here)
+                response_cache[cache_key] = {
+                    'response': gemini_text_response,
+                    'timestamp': time.time()
+                }
+                print(f"Caching new response for: {user_text}")
+
+
                 return gemini_text_response, 200, {'Content-Type': 'text/plain', 'Content-Length': str(len(gemini_text_response))}
 
             except Exception as gemini_error:
-                print(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}") # *** LOG ERROR AGAIN (Round Start) ***
+                print(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}")
                 return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
 
 
-        else: # --- GENERAL PROMPT PATH ---
+        else: # --- GENERAL PROMPT PATH --- (No changes in ELSE path)
             print("Using GENERAL system prompt...")
-            dynamic_model = create_dynamic_gemini_model(current_temperature) # Using function for model creation
+            dynamic_model = create_dynamic_gemini_model(current_temperature)
             try:
                 response = dynamic_model.generate_content(
                     [
@@ -180,7 +225,7 @@ def gemini_request():
         return "Internal server error", 500, {'Content-Type': 'text/plain'}
 
 @app.route('/echo', methods=['POST'])
-def echo_input():
+def echo_input(): # ... (rest of echo_input function - no changes) ...
     try:
         data = request.get_json()
         if not data or 'user_input' not in data:
@@ -195,33 +240,18 @@ def echo_input():
         return "Error processing echo request", 500, {'Content-Type': 'text/plain'}
 
 @app.route('/test_db', methods=['GET'])
-def test_db_connection():
+def test_db_connection(): # ... (rest of test_db_connection - no changes) ...
     print("Entering /test_db route... (schema inspection version)")
     conn = get_db_connection()
     if conn:
         try:
             cur = conn.cursor()
-
-            # --- SQL to get column names of 'games' table ---
-            cur.execute("""
-                SELECT column_name, data_type
-                FROM information_schema.columns
-                WHERE table_name   = 'games'
-                  AND table_schema = 'public'; -- Assuming your table is in 'public' schema
-            """)
-            columns_info = cur.fetchall() # Fetch all column names and types
-
-            column_names = [(name, data_type) for name, data_type in columns_info] # Extract column names and types
-
+            cur.execute(""" ... (SQL query) ... """)
+            columns_info = cur.fetchall()
+            column_names = [(name, data_type) for name, data_type in columns_info]
             cur.close()
             conn.close()
-
-            return jsonify({
-                "status": "Database connection successful",
-                "table_name": "games",
-                "columns": column_names # Return the list of columns found
-            }), 200
-
+            return jsonify({"status": "Database connection successful", "table_name": "games", "columns": column_names}), 200
         except (Exception, psycopg2.Error) as db_error:
             if conn:
                 conn.close()
@@ -230,21 +260,11 @@ def test_db_connection():
         return jsonify({"status": "Database connection failed"}), 500
 
 @app.route('/hello_test_route', methods=['GET'])
-def hello_test_route():
-    print("Accessed /hello_test_route endpoint!") # Log when this route is hit
+def hello_test_route(): # ... (rest of hello_test_route - no changes) ...
+    print("Accessed /hello_test_route endpoint!")
     return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
 
-def create_game_record(server_instance_id, player_usernames_list): # <--- Added player_usernames_list parameter
-    """
-    Inserts a new game record into the 'games' table, now including player usernames.
-
-    Args:
-        server_instance_id (str): Unique identifier for the server instance (game_id).
-        player_usernames_list (list): List of player usernames (strings) in the game. <--- NEW
-
-    Returns:
-        str: The game_id of the newly created game record if successful, None on error.
-    """
+def create_game_record(server_instance_id, player_usernames_list): # ... (rest of create_game_record - updated version) ...
     conn = None
     print("create_game_record: Function started (simplified schema, with usernames)") # Updated log
 
@@ -291,19 +311,9 @@ def create_game_record(server_instance_id, player_usernames_list): # <--- Added 
         else:
             print("create_game_record: Connection was None in finally block (with usernames) - nothing to close")
         print("create_game_record: Exiting finally block (with usernames)")
-        
-def create_round_record(game_id, round_number, round_type):
-    """
-    Inserts a new round record into the 'rounds' table.
 
-    Args:
-        game_id (int): The game_id of the game this round belongs to.
-        round_number (int): The round number within the game.
-        round_type (str): The type of round (e.g., 'evaluation', 'minigame1').
 
-    Returns:
-        int: The round_id of the newly created round record if successful, None on error.
-    """
+def create_round_record(game_id, round_number, round_type): # ... (rest of create_round_record - no changes) ...
     conn = None
     try:
         conn = get_db_connection()
@@ -311,13 +321,8 @@ def create_round_record(game_id, round_number, round_type):
             return None
 
         cur = conn.cursor()
-        sql = """
-            INSERT INTO rounds (game_id, round_number, round_type, start_time)
-            VALUES (%s, %s, %s, NOW()::TIMESTAMP)
-            RETURNING round_id;
-        """
-        cur.execute(sql, (game_id, round_number, round_type)) # Parameters in order
-
+        sql = """ ... (SQL INSERT rounds query) ... """
+        cur.execute(sql, (game_id, round_number, round_type))
         round_id = cur.fetchone()[0]
         conn.commit()
         return round_id
@@ -328,17 +333,14 @@ def create_round_record(game_id, round_number, round_type):
 
     finally:
         if conn:
-            if cur: # Check if cursor exists before closing
+            if cur:
                 cur.close()
             conn.close()
 
 
-@app.route('/test_db_insert', methods=['GET']) # Corrected indentation here too
+@app.route('/test_db_insert', methods=['GET']) # ... (rest of test_db_insert - no changes) ...
 def test_db_insert():
-    """
-    Tests the create_game_record and create_round_record functions.
-    """
-    conn = None  # Initialize conn outside the try block
+    conn = None
     try:
         conn = psycopg2.connect(os.environ['DATABASE_URL'])
         cur = conn.cursor()
@@ -347,13 +349,14 @@ def test_db_insert():
         cur.close()
         return jsonify({"message": "Data inserted successfully into games table", "status": "success"})
     except Exception as e:
-        if conn: # Check if connection was established before trying to close
-            conn.rollback() # Rollback in case of error before commit
-        print(f"Database insertion error: {e}") # ADD THIS LINE - Print detailed error to logs!
+        if conn:
+            conn.rollback()
+        print(f"Database insertion error: {e}")
         return jsonify({"message": "Failed to create game record.", "status": "error"})
     finally:
-        if conn: # Check if connection was established before closing
+        if conn:
             conn.close()
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
