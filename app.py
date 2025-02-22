@@ -299,7 +299,7 @@ def hello_test_route():  # ... (rest of hello_test_route - no changes - still co
     print("Accessed /hello_test_route endpoint!")
     return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
 
-def create_game_record(server_instance_id, player_usernames_list):  # ... (rest of create_game_record - updated version - still correct in your code) ...
+def create_game_record(server_instance_id, player_usernames_list):
     conn = None
     print("create_game_record: Function started (simplified schema, with usernames)")  # Updated log
 
@@ -319,10 +319,11 @@ def create_game_record(server_instance_id, player_usernames_list):  # ... (rest 
 
         sql = """
             INSERT INTO games (game_id, start_time, status, player_usernames)  -- Added player_usernames column
-            VALUES (%s, NOW()::TIMESTAMP, %s, %s)                      -- Added %s placeholder for usernames
+            VALUES (%s, %s, %s, %s)                      -- Added %s placeholder for usernames
             RETURNING game_id;
         """
-        values = (server_instance_id, 'starting', player_usernames_str)  # Values now include usernames
+        # --- CORRECTED VALUES TUPLE - NOW WITH 4 VALUES ---
+        values = (server_instance_id, "NOW()", 'starting', player_usernames_str)  # Values now include 4 values: game_id, start_time, status, usernames
         print(f"create_game_record: Executing SQL Query (INSERT game record - with usernames): {sql} with values: {values}")  # Updated log
         cur.execute(sql, values)
         print("create_game_record: SQL query executed successfully (with usernames)")
