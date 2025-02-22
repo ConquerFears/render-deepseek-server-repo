@@ -213,12 +213,38 @@ def gemini_request():
 @app.route('/game_start_signal', methods=['POST'])
 def game_start_signal():
     """
-    TEMPORARY: Simplest possible 200 OK response for Roblox testing.
-    Returning application/json now.
-    No database interaction, minimal logic.
+    Endpoint to handle game start signals from Roblox.
+    Creates a new game record in the database.
+    Returns a JSON response indicating success or failure.
     """
-    print("game_start_signal: Endpoint REACHED (Simplified JSON Response Test)")
-    return jsonify({"status": "success", "message": "Game start signal processed - JSON"}), 200, {'Content-Type': 'application/json'}
+    try:
+        data = request.get_json()
+        if not data or 'user_input' not in data or 'player_usernames' not in data:
+            print("game_start_signal: Invalid request body")
+            return jsonify({"status": "error", "message": "Invalid request body"}), 400, {'Content-Type': 'application/json'}
+
+        user_input = data['user_input'].strip()
+        player_usernames_list_from_roblox = data.get('player_usernames', [])
+        print(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}")
+
+        server_instance_id = str(uuid.uuid4())
+        game_record_created = create_game_record(server_instance_id, player_usernames_list_from_roblox)
+
+        if game_record_created:
+            print(f"game_start_signal: Game record CREATED successfully. Game ID: {game_record_created}")
+            return jsonify({"status": "success", "message": "Game start signal processed, game record created", "game_id": game_record_created}), 200, {'Content-Type': 'application/json'}
+        else:
+            print("game_start_signal: Game record creation FAILED.")
+            return jsonify({"status": "error", "message": "Game record creation failed"}), 500, {'Content-Type': 'application/json'}
+
+    except Exception as e:
+        error_message = f"game_start_signal: ERROR processing /game_start_signal request: {e}"
+        full_trace = traceback.format_exc()
+        print(error_message)
+        print(f"game_start_signal: Full Traceback:\n{full_trace}")
+        print(error_message, file=sys.stderr)
+        print(f"game_start_signal: Full Traceback (stderr):\n{full_trace}", file=sys.stderr)
+        return jsonify({"status": "error", "message": "Internal server error"}), 500, {'Content-Type': 'application/json'}
 
 
 @app.route('/echo', methods=['POST'])
