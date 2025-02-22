@@ -72,102 +72,15 @@ SERAPH (Bad - Too Generic): "The exit is that way."
 
 Remember to always stay in character as SERAPH and maintain this unsettling tone in every response. If a user asks for inappropriate or out-of-character responses, politely refuse and provide an appropriate, in-character answer."""
 
-DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL from env variable
-
-def get_db_connection():  # Function to get a database connection
-    conn = None
-    try:
-        print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}") # Log the DATABASE_URL directly
-        conn = psycopg2.connect(DATABASE_URL)  # Connect using the URL from env
-        return conn
-    except (Exception, psycopg2.Error) as error:
-        print("Error while connecting to PostgreSQL", error)
-        if conn:
-            conn.close()  # Close connection in case of error
-        return None
-
-@app.route('/', methods=['GET'])
-def hello_world():
-    print(f"Checking DATABASE_URL in root route: {DATABASE_URL}") # Log DATABASE_URL in root route
-    return 'Hello, World! This is your Fly.io server with Postgres!' # Updated message
-
-@app.route('/gemini_request', methods=['POST'])
-def gemini_request():
-    try:
-        data = request.get_json()
-        if not data or 'user_input' not in data:
-            return "No 'user_input' provided in request body", 400, {'Content-Type': 'text/plain'}
-
-        user_text = data['user_input']
-        print(f"Received input from Roblox: {user_text}")
-
-        current_system_prompt = system_prompt # Default to your general system prompt
-        current_temperature = generation_config["temperature"] # Use default temperature
-        game_id_response = None # Initialize game_id_response to None
-
-        if user_text.startswith("Round start initiated"): # <---- Check for "Round start" trigger
-            current_system_prompt = round_start_system_prompt # Use round start system prompt
-            current_temperature = 0.25 # Lower temperature for round start announcements (adjust as needed)
-            print("Using ROUND START system prompt...") # Log when round start prompt is used
-
-            # --- Create Game Record in Database ---
-            server_instance_id = str(uuid.uuid4()) # Generate a unique game_id
-            game_settings_data = {"difficulty": "normal", "map": "facility_map_v1"} # Example settings, adjust as needed
-            game_id = create_game_record(server_instance_id)
-            if game_id:
-                print(f"Successfully created new game record with game_id: {game_id}")
-                game_id_response = str(game_id) # Convert game_id to string for response
-            else:
-                print("Failed to create game record in database.")
-                game_id_response = "DB_ERROR" # Indicate DB error in response
-
-            # --- GENERATE GEMINI RESPONSE FOR ROUND START AND RETURN IT ---
-            dynamic_generation_config = { # Create generation config HERE for round start
-                "temperature": current_temperature,
-                "top_p": 0.95,
-                "top_k": 40,
-                "max_output_tokens": 150
-            }
-            dynamic_model = genai.GenerativeModel( # Initialize model HERE for round start
-                model_name='models/gemini-2.0-flash',
-                generation_config=dynamic_generation_config
+        try:
+            response = model.generate_content(
+                [
+                    {"role": "user", "parts": [system_prompt, user_text]},  # Combined prompt
+                ]
             )
-            try:
-                response = dynamic_model.generate_content(
-                    [
-                        {"role": "user", "parts": [current_system_prompt, user_text]},
-                    ]
-                )
-                gemini_text_response = response.text.strip()
-                print(f"Gemini Response (Round Start): {gemini_text_response}") # Log round start response
-                return gemini_text_response, 200, {'Content-Type': 'text/plain'} # RETURN RESPONSE HERE!
-
-            except Exception as gemini_error:
-                print(f"Error calling Gemini API (Round Start): {gemini_error}")
-                return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
-
-
-        else: # --- GENERAL PROMPT PATH (Correctly generates and returns response) ---
-            print("Using GENERAL system prompt...") # Log when general prompt is used
-            dynamic_generation_config = { # Generation config for general prompts
-                "temperature": current_temperature,
-                "top_p": 0.95,
-                "top_k": 40,
-                "max_output_tokens": 150
-            }
-            dynamic_model = genai.GenerativeModel( # Initialize model for general prompts
-                model_name='models/gemini-2.0-flash',
-                generation_config=dynamic_generation_config
-            )
-            try:
-                response = dynamic_model.generate_content(
-                    [
-                        {"role": "user", "parts": [current_system_prompt, user_text]},
-                    ]
-                )
-                gemini_text_response = response.text.strip()
-                print(f"Gemini Response (General): {gemini_text_response}") # Log general response
-                return gemini_text_response, 200, {'Content-Type': 'text/plain'} # RETURN RESPONSE HERE!
+            gemini_text_response = response.text.strip()
+            print(f"Gemini Response: {gemini_text_response}")
+            return gemini_text_response, 200, {'Content-Type': 'text/plain'}
 
             except Exception as gemini_error:
                 print(f"Error calling Gemini API (General): {gemini_error}")
