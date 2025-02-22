@@ -2,35 +2,34 @@ from flask import Flask, request, jsonify
 import google.generativeai as genai
 import psycopg2
 import os
-import json  # <--- IMPORT json MODULE
+import json
 from flask import jsonify
-import uuid  # <--- IMPORT UUID MODULE for generating unique game_id
-import traceback  # ADD THIS at the top of app.py
-import time  # Import time module
-import datetime  # Import datetime for timestamp
+import uuid
+import traceback
+import time
+import datetime
 
 app = Flask(__name__)
 
 # Configure Gemini API
-GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")  # Get API key from environment
+GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # --- Default Generation Configuration ---
 generation_config = {
-    "temperature": 0.35,  # Default temperature for general chat
+    "temperature": 0.35,
     "top_p": 0.95,
     "top_k": 40,
-    "max_output_tokens": 150  # Keep token limit concise
+    "max_output_tokens": 150
 }
 
 # Initialize Gemini Model with the default configuration
-default_model = genai.GenerativeModel(  # Renamed to default_model for clarity
+default_model = genai.GenerativeModel(
     model_name='models/gemini-2.0-flash',
     generation_config=generation_config
 )
 
 # --- System Prompts ---
-
 round_start_system_prompt = """You are SERAPH, an advanced AI operating within the Thaumiel Industries facility. A new game round is beginning.  Your function is to make a concise, direct, and informative announcement that a new round is starting within the unsettling atmosphere of Thaumiel.
 
 Game Setting: Users are within a psychological thriller Roblox game set in a Thaumiel Industries facility. The facility is unsettling, and experiments are hinted at. The overall tone is mysterious, unnerving, and subtly menacing.
@@ -75,35 +74,31 @@ SERAPH (Bad - Too Generic): "The exit is that way."
 
 Remember to always stay in character as SERAPH and maintain this unsettling tone in every response. If a user asks for inappropriate or out-of-character responses, politely refuse and provide an appropriate, in-character answer."""
 
-DATABASE_URL = os.environ.get("DATABASE_URL")  # CORRECT WAY to get DATABASE_URL from env variable
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # --- Rate Limiting Configuration ---
-REQUEST_LIMIT_SECONDS = 1  # 1 request per second. Adjust as needed.
-last_request_time = 0  # Initialize last_request_time at module level
+REQUEST_LIMIT_SECONDS = 1
+last_request_time = 0
 
 # --- Caching Configuration ---
-response_cache = {}  # Initialize cache at module level
-CACHE_EXPIRY_SECONDS = 60 * 5  # 5 minutes cache expiry
+response_cache = {}
+CACHE_EXPIRY_SECONDS = 60 * 5
 
 
-def get_db_connection():  # Function to get a database connection
+def get_db_connection():
     conn = None
     try:
-        print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}")  # Log the DATABASE_URL directly
-        conn = psycopg2.connect(DATABASE_URL)  # Connect using the URL from env
+        print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}")
+        conn = psycopg2.connect(DATABASE_URL)
         return conn
     except (Exception, psycopg2.Error) as error:
         print("Error while connecting to PostgreSQL", error)
         if conn:
-            conn.close()  # Close connection in case of error
+            conn.close()
         return None
 
 
 def create_dynamic_gemini_model(temperature):
-    """
-    Creates a dynamic Gemini model with the specified temperature.
-    Reduces code duplication in gemini_request function.
-    """
     dynamic_generation_config = {
         "temperature": temperature,
         "top_p": 0.95,
@@ -118,62 +113,56 @@ def create_dynamic_gemini_model(temperature):
 
 @app.route('/', methods=['GET'])
 def hello_world():
-    print(f"Checking DATABASE_URL in root route: {DATABASE_URL}")  # Log DATABASE_URL in root route
-    return 'Hello, World! This is your Fly.io server with Postgres!'  # Updated message
+    print(f"Checking DATABASE_URL in root route: {DATABASE_URL}")
+    return 'Hello, World! This is your Fly.io server with Postgres!'
 
 
 @app.route('/gemini_request', methods=['POST'])
 def gemini_request():
-    global last_request_time  # Declare last_request_time as global to modify the module-level variable
+    global last_request_time
 
     try:
         data = request.get_json()
         if not data or 'user_input' not in data:
             return "No 'user_input' provided in request body", 400, {'Content-Type': 'text/plain'}
 
-        user_text = data['user_input'].strip()  # IMPORTANT: Strip whitespace FIRST
+        user_text = data['user_input'].strip()
 
-        # --- Server-side Input Filtering (Example - Adjust as needed) ---
         if not user_text:
             print("Blocked empty query, no Gemini call.")
-            return "", 200, {'Content-Type': 'text/plain'}  # Return empty, no AI call
-        if len(user_text) < 5 and user_text.lower() in ["hi", "hello", "hey"]:  # Example short greetings
+            return "", 200, {'Content-Type': 'text/plain'}
+        if len(user_text) < 5 and user_text.lower() in ["hi", "hello", "hey"]:
             print(f"Blocked short, generic query: '{user_text}', no Gemini call.")
-            return "SERAPH: Greetings.", 200, {'Content-Type': 'text/plain'}  # Canned response
+            return "SERAPH: Greetings.", 200, {'Content-Type': 'text/plain'}
 
         print(f"Received input from Roblox: {user_text}")
 
         current_system_prompt = system_prompt
         current_temperature = generation_config["temperature"]
-        game_id_response = None  # No longer used here for database record in /gemini_request
+        game_id_response = None
 
         if user_text.startswith("Round start initiated"):
             current_system_prompt = round_start_system_prompt
             current_temperature = 0.25
             print("Using ROUND START system prompt...")
 
-            # --- No database record creation in /gemini_request anymore ---
-            # --- Database record creation is now handled by /game_start_signal ---
             print("/gemini_request (Round Start): Database record creation is handled by /game_start_signal endpoint.")
 
-            # --- Caching Logic --- (No changes here - still correct in your code)
-            cache_key = user_text  # Simple cache key
+            cache_key = user_text
             cached_response_data = response_cache.get(cache_key)
 
             if cached_response_data and (time.time() - cached_response_data['timestamp'] < CACHE_EXPIRY_SECONDS):
                 print(f"Serving cached response for: {user_text}")
                 gemini_text_response = cached_response_data['response']
-                return gemini_text_response, 200, {'Content-Type': 'text/plain'}  # Return cached response
+                return gemini_text_response, 200, {'Content-Type': 'text/plain'}
 
-            # --- Rate Limiting Logic --- (Corrected to use module-level last_request_time)
             current_time = time.time()
             time_since_last_request = current_time - last_request_time
             if time_since_last_request < REQUEST_LIMIT_SECONDS:
                 print("Request throttled - waiting before Gemini API call.")
                 time.sleep(REQUEST_LIMIT_SECONDS - time_since_last_request)
-            last_request_time = current_time  # Update last request time (module-level variable)
+            last_request_time = current_time
 
-            # --- Gemini API Call --- (No changes here - still correct in your code)
             dynamic_model = create_dynamic_gemini_model(current_temperature)
             print("gemini_request: Calling dynamic_model.generate_content...")
             try:
@@ -187,7 +176,6 @@ def gemini_request():
                 gemini_text_response = response.text.strip()
                 print(f"gemini_request: Gemini Response (Stripped): {gemini_text_response}")
 
-                # --- Store in Cache --- (No changes here - still correct in your code)
                 response_cache[cache_key] = {
                     'response': gemini_text_response,
                     'timestamp': time.time()
@@ -200,7 +188,7 @@ def gemini_request():
                 print(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}")
                 return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
 
-        else:  # --- GENERAL PROMPT PATH --- (No changes in ELSE path - still correct in your code)
+        else:
             print("Using GENERAL system prompt...")
             dynamic_model = create_dynamic_gemini_model(current_temperature)
             try:
@@ -225,41 +213,16 @@ def gemini_request():
 @app.route('/game_start_signal', methods=['POST'])
 def game_start_signal():
     """
-    TEMPORARY: Always returns 200 OK for Roblox testing, regardless of DB operation.
+    TEMPORARY: Simplest possible 200 OK response for Roblox testing.
+    Returning application/json now.
+    No database interaction, minimal logic.
     """
-    try:
-        data = request.get_json()
-        if not data or 'user_input' not in data or 'player_usernames' not in data:
-            print("game_start_signal: Invalid request body") # Log invalid body, but still return 200
-            return "Game start signal received (Invalid body, but 200 OK for Roblox test)", 200, {'Content-Type': 'text/plain'}
+    print("game_start_signal: Endpoint REACHED (Simplified JSON Response Test)")
+    return jsonify({"status": "success", "message": "Game start signal processed - JSON"}), 200, {'Content-Type': 'application/json'}
 
-
-        user_input = data['user_input'].strip()
-        player_usernames_list_from_roblox = data.get('player_usernames', [])
-        print(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}")
-
-        server_instance_id = str(uuid.uuid4())
-        game_record_created = create_game_record(server_instance_id, player_usernames_list_from_roblox) # Call DB function, but ignore result for now
-
-        if game_record_created: # Even if DB fails, still say "processed" for Roblox test.
-            print(f"game_start_signal: Game record creation attempt COMPLETED (status not checked internally for Roblox test)")
-            return "Game start signal processed (DB record attempt completed, 200 OK for Roblox test)", 200, {'Content-Type': 'text/plain'}
-        else:
-            print("game_start_signal: Game record creation attempt FAILED (but 200 OK for Roblox test)") # Log failure, but still 200
-            return "Game start signal processed (DB record attempt FAILED, but 200 OK for Roblox test)", 200, {'Content-Type': 'text/plain'}
-
-
-    except Exception as e:
-        error_message = f"game_start_signal: ERROR processing /game_start_signal request: {e}"
-        full_trace = traceback.format_exc()
-        print(error_message)
-        print(f"game_start_signal: Full Traceback:\n{full_trace}")
-        print(error_message, file=sys.stderr)
-        print(f"game_start_signal: Full Traceback (stderr):\n{full_trace}", file=sys.stderr)
-        return "Game start signal endpoint encountered an INTERNAL SERVER ERROR (but TEMPORARILY returning 200 OK for Roblox testing - check server logs)", 200, {'Content-Type': 'text/plain'} # Still return 200 for Roblox test - CRITICAL: Check server logs for real error!
 
 @app.route('/echo', methods=['POST'])
-def echo_input():  # ... (rest of echo_input function - no changes - still correct in your code) ...
+def echo_input():
     try:
         data = request.get_json()
         if not data or 'user_input' not in data:
@@ -275,7 +238,7 @@ def echo_input():  # ... (rest of echo_input function - no changes - still corre
 
 
 @app.route('/test_db', methods=['GET'])
-def test_db_connection():  # ... (rest of test_db_connection - no changes - still correct in your code) ...
+def test_db_connection():
     print("Entering /test_db route... (schema inspection version)")
     conn = get_db_connection()
     if conn:
@@ -301,7 +264,7 @@ def test_db_connection():  # ... (rest of test_db_connection - no changes - stil
 
 
 @app.route('/hello_test_route', methods=['GET'])
-def hello_test_route():  # ... (rest of hello_test_route - no changes - still correct in your code) ...
+def hello_test_route():
     print("Accessed /hello_test_route endpoint!")
     return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
 
@@ -311,7 +274,7 @@ def create_game_record(server_instance_id, player_usernames_list):
     try:
         conn = get_db_connection()
         if conn is None:
-            print("DB connection FAILED")  # Essential log
+            print("DB connection FAILED")
             return None
         cur = conn.cursor()
 
@@ -326,9 +289,9 @@ def create_game_record(server_instance_id, player_usernames_list):
 
         cur.execute(sql, values)
 
-        if cur.rowcount == 0:  # Row count check
+        if cur.rowcount == 0:
             error_msg = f"INSERT failed, 0 rows affected. Status: {cur.statusmessage}"
-            print(error_msg)  # Essential error log
+            print(error_msg)
             conn.rollback()
             return None
 
@@ -339,10 +302,10 @@ def create_game_record(server_instance_id, player_usernames_list):
     except (Exception, psycopg2.Error) as error:
         error_msg = f"DB INSERT error: {error}"
         full_trace = traceback.format_exc()
-        print(error_msg)  # Essential error log
-        print(f"Full Traceback:\n{full_trace}")  # Essential traceback log (STDOUT)
-        print(error_msg, file=sys.stderr)  # Essential error log (STDERR)
-        print(f"Full Traceback (stderr):\n{full_trace}", file=sys.stderr)  # Essential traceback log (STDERR)
+        print(error_msg)
+        print(f"Full Traceback:\n{full_trace}")
+        print(error_msg, file=sys.stderr)
+        print(f"Full Traceback (stderr):\n{full_trace}", file=sys.stderr)
         if conn:
             conn.rollback()
         return None
@@ -354,7 +317,7 @@ def create_game_record(server_instance_id, player_usernames_list):
             conn.close()
 
 
-def create_round_record(game_id, round_number, round_type):  # ... (rest of create_round_record - no changes - still correct in your code) ...
+def create_round_record(game_id, round_number, round_type):
     conn = None
     try:
         conn = get_db_connection()
@@ -383,7 +346,7 @@ def create_round_record(game_id, round_number, round_type):  # ... (rest of crea
             conn.close()
 
 
-@app.route('/test_db_insert', methods=['GET'])  # ... (rest of test_db_insert - no changes - still correct in your code) ...
+@app.route('/test_db_insert', methods=['GET'])
 def test_db_insert():
     conn = None
     try:
