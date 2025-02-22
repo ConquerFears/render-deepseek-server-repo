@@ -143,7 +143,7 @@ def gemini_request():
                 gemini_text_response = response.text.strip()
                 print(f"gemini_request (Round Start): Gemini Response (Stripped): {gemini_text_response}") # Log round start response
                 print("gemini_request (Round Start): About to return response.") # *** LOG BEFORE RETURN (Round Start) ***
-                return gemini_text_response, 200, {'Content-Type': 'text/plain'} # RETURN RESPONSE HERE!
+                return gemini_text_response, 200, {'Content-Type': 'text/plain', 'Content-Length': str(len(gemini_text_response))}
 
             except Exception as gemini_error:
                 print(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}") # *** LOG ERROR AGAIN (Round Start) ***
