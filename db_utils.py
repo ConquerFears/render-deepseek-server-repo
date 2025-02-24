@@ -109,33 +109,32 @@ def update_game_status_and_usernames(game_id_str, player_usernames_list):
                 cur.close()
             conn.close()
 
-
-    # Function to create a new round record in the database (currently not used in game start)
-    def create_round_record(game_id, round_number, round_type):
-        conn = None
-        try:
-            conn = get_db_connection()
-            if conn is None:
-                return None
-
-            cur = conn.cursor()
-            sql = """
-                INSERT INTO rounds (game_id, round_number, round_type, start_time, status)
-                VALUES (%s, %s, %s, NOW()::TIMESTAMP, 'starting')
-                RETURNING round_id;
-            """
-            cur.execute(sql, (game_id, round_number, round_type))
-            round_id = cur.fetchone()[0]
-            conn.commit()
-            return round_id
-
-        except (Exception, psycopg2.Error) as error:
-            print("Error in create_round_record:", error)
-            traceback.print_exc() # More detailed error logging
+# Function to create a new round record in the database (currently not used in game start)
+def create_round_record(game_id, round_number, round_type):
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
             return None
 
-        finally:
-            if conn:
-                if cur:
-                    cur.close()
-                conn.close()
+        cur = conn.cursor()
+        sql = """
+            INSERT INTO rounds (game_id, round_number, round_type, start_time, status)
+            VALUES (%s, %s, %s, NOW()::TIMESTAMP, 'starting')
+            RETURNING round_id;
+        """
+        cur.execute(sql, (game_id, round_number, round_type))
+        round_id = cur.fetchone()[0]
+        conn.commit()
+        return round_id
+
+    except (Exception, psycopg2.Error) as error:
+        print("Error in create_round_record:", error)
+        traceback.print_exc() # More detailed error logging
+        return None
+
+    finally:
+        if conn:
+            if cur:
+                cur.close()
+            conn.close()
