@@ -185,10 +185,10 @@ def update_game_status_and_usernames(game_id_str, player_usernames_list):
         sql_update = """
             UPDATE games
             SET status = 'active', player_usernames = %s
-            WHERE game_id = %s;
+            WHERE game_id = %s::TEXT;  -- Explicitly cast game_id to TEXT in SQL
         """
-        game_id_uuid = uuid.UUID(game_id_str) # Ensure game_id is UUID for query
-        cur.execute(sql_update, (player_usernames_str, game_id_uuid))
+        # game_id_uuid = uuid.UUID(game_id_str)  -- No need to convert to UUID object anymore
+        cur.execute(sql_update, (player_usernames_str, game_id_str)) # Use game_id_str directly
         conn.commit()
 
         if cur.rowcount > 0:
@@ -489,10 +489,11 @@ def game_status_update():
     game_id_str = data['game_id']
     player_usernames_list_from_roblox = data['player_usernames'] # Get usernames from request
 
-    try:
-        game_id_uuid = uuid.UUID(game_id_str) # Validate game_id format as UUID
-    except ValueError:
-        return jsonify({"status": "error", "message": "Invalid 'game_id' format (must be UUID)"}), 400
+    # --- NO NEED TO CONVERT TO UUID OBJECT HERE ---
+    # try:
+    #     game_id_uuid = uuid.UUID(game_id_str) # Validate game_id format as UUID
+    # except ValueError:
+    #     return jsonify({"status": "error", "message": "Invalid 'game_id' format (must be UUID)"}), 400
 
     success, message = update_game_status_and_usernames(game_id_str, player_usernames_list_from_roblox) # Call combined update function
 
