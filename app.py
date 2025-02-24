@@ -5,7 +5,7 @@ import os
 import json
 import time
 import datetime
-from db_utils import get_db_connection, create_game_record, update_game_status_and_usernames, create_round_record # Import DB functions
+from db_utils import DATABASE_URL, get_db_connection, create_game_record, update_game_status_and_usernames, create_round_record # Import DB functions
 from gemini_utils import default_model, round_start_system_prompt, system_prompt, generation_config, REQUEST_LIMIT_SECONDS, last_request_time, response_cache, CACHE_EXPIRY_SECONDS, create_dynamic_gemini_model # Import Gemini/config
 
 # ========================================================================
