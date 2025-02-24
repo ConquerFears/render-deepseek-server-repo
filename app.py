@@ -212,18 +212,20 @@ def hello_test_route():
 def test_db_insert():
     conn = None
     try:
-        conn = psycopg2.connect(os.environ['DATABASE_URL']) # Direct DB connection for test
-        cur = conn.cursor() # Create cursor
-        cur.execute("INSERT INTO games (status) VALUES ('running')") # Execute simple INSERT query
-        conn.commit() # Commit the insertion
-        cur.close() # Close cursor
-        return jsonify({"message": "Data inserted successfully into games table", "status": "success"}) # Return success JSON
-    except Exception as e: # Handle database insertion errors
+        conn = get_db_connection()  # Use the helper function
+        if conn is None:
+            return jsonify({"message": "Failed to connect to database", "status": "error"})
+        cur = conn.cursor()
+        cur.execute("INSERT INTO games (status) VALUES ('running')")
+        conn.commit()
+        cur.close()
+        return jsonify({"message": "Data inserted successfully into games table", "status": "success"})
+    except Exception as e:
         if conn:
-            conn.rollback() # Rollback transaction on error
-        traceback.print_exc() # More detailed error logging
-        return jsonify({"message": "Failed to create game record.", "status": "error"}) # Return error JSON
-    finally: # Ensure connection is closed
+            conn.rollback()
+        traceback.print_exc()
+        return jsonify({"message": "Failed to create game record.", "status": "error"})
+    finally:
         if conn:
             conn.close()
 
