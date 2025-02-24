@@ -273,6 +273,90 @@ def game_status_update():
     else:
         return jsonify({"status": "error", "message": message}), 500
 
+# --- 9.9: /game_cleanup route - endpoint to handle game cleanup when a Roblox server shuts down ---
+@app.route('/game_cleanup', methods=['POST'])
+def game_cleanup():
+    """
+    Endpoint to handle game cleanup when a Roblox server shuts down.
+    Expects a JSON payload with game_id.
+    Deletes the corresponding game record from the database.
+    """
+    try:
+        data = request.get_json()
+        if not data or 'game_id' not in data:
+            print("game_cleanup: Missing game_id in request")
+            return jsonify({
+                "status": "error",
+                "message": "Missing game_id in request"
+            }), 400
+
+        game_id = data['game_id']
+        print(f"game_cleanup: Received cleanup request for game_id: {game_id}")
+
+        # Handle the "UNKNOWN_GAME_ID" case from Roblox
+        if game_id == "UNKNOWN_GAME_ID":
+            print("game_cleanup: Received UNKNOWN_GAME_ID, skipping cleanup")
+            return jsonify({
+                "status": "warning",
+                "message": "Skipped cleanup for UNKNOWN_GAME_ID"
+            }), 200
+
+        conn = None
+        try:
+            conn = get_db_connection()
+            if conn is None:
+                return jsonify({
+                    "status": "error",
+                    "message": "Database connection failed"
+                }), 500
+
+            cur = conn.cursor()
+            
+            # First verify the game exists
+            cur.execute("SELECT status FROM games WHERE game_id = %s", (game_id,))
+            game = cur.fetchone()
+            
+            if not game:
+                print(f"game_cleanup: No game found with ID: {game_id}")
+                return jsonify({
+                    "status": "warning",
+                    "message": f"No game found with ID: {game_id}"
+                }), 404
+
+            # Delete the game record
+            cur.execute("DELETE FROM games WHERE game_id = %s", (game_id,))
+            conn.commit()
+            
+            print(f"game_cleanup: Successfully deleted game {game_id}")
+            return jsonify({
+                "status": "success",
+                "message": f"Game {game_id} cleaned up successfully"
+            }), 200
+
+        except Exception as db_error:
+            print(f"game_cleanup: Database error: {db_error}")
+            traceback.print_exc()
+            if conn:
+                conn.rollback()
+            return jsonify({
+                "status": "error",
+                "message": f"Database error: {str(db_error)}"
+            }), 500
+
+        finally:
+            if conn:
+                if cur:
+                    cur.close()
+                conn.close()
+
+    except Exception as e:
+        print(f"game_cleanup: Unexpected error: {e}")
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": f"Server error: {str(e)}"
+        }), 500
+
 
 # ========================================================================
 #                      SECTION 10: MAIN APPLICATION START
