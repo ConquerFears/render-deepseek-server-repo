@@ -15,10 +15,15 @@ def get_db_connection():
     conn = None
     try:
         print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}")
+        if not DATABASE_URL:
+            print("ERROR: DATABASE_URL is not set!")
+            return None
         conn = psycopg2.connect(DATABASE_URL)
+        print("Database connection successful!")
         return conn
     except (Exception, psycopg2.Error) as error:
-        print("Error while connecting to PostgreSQL", error)
+        print(f"Error while connecting to PostgreSQL: {error}")
+        traceback.print_exc()
         if conn:
             conn.close()
         return None

@@ -5,8 +5,25 @@ import os
 import json
 import time
 import datetime
-from db_utils import DATABASE_URL, get_db_connection, create_game_record, update_game_status_and_usernames, create_round_record # Import DB functions
-from gemini_utils import default_model, round_start_system_prompt, system_prompt, generation_config, REQUEST_LIMIT_SECONDS, last_request_time, response_cache, CACHE_EXPIRY_SECONDS, create_dynamic_gemini_model # Import Gemini/config
+import psycopg2
+from db_utils import (
+    DATABASE_URL, 
+    get_db_connection, 
+    create_game_record, 
+    update_game_status_and_usernames, 
+    create_round_record
+)
+from gemini_utils import (
+    default_model, 
+    round_start_system_prompt, 
+    system_prompt, 
+    generation_config, 
+    REQUEST_LIMIT_SECONDS, 
+    last_request_time, 
+    response_cache, 
+    CACHE_EXPIRY_SECONDS, 
+    create_dynamic_gemini_model
+)
 
 # ========================================================================
 #                      SECTION 1:  FLASK APP INITIALIZATION
@@ -178,27 +195,27 @@ def echo_input():
 @app.route('/test_db', methods=['GET'])
 def test_db_connection():
     print("Entering /test_db route... (schema inspection version)")
-    conn = get_db_connection() # Get database connection
-    if conn: # If connection successful
+    conn = get_db_connection()
+    if conn:
         try:
-            cur = conn.cursor() # Create a database cursor
-            cur.execute(""" # Execute SQL query to get games table schema
+            cur = conn.cursor()
+            cur.execute("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
                 WHERE table_name = 'games'
                 ORDER BY column_name;
             """)
-            columns_info = cur.fetchall() # Fetch all results
-            column_names = [(name, data_type) for name, data_type in columns_info] # Reformat column info
-            cur.close() # Close cursor
-            conn.close() # Close connection
-            return jsonify({"status": "Database connection successful", "table_name": "games", "columns": column_names}), 200 # Return success JSON
-        except (Exception, psycopg2.Error) as db_error: # Handle database query errors
+            columns_info = cur.fetchall()
+            column_names = [(name, data_type) for name, data_type in columns_info]
+            cur.close()
+            conn.close()
+            return jsonify({"status": "Database connection successful", "table_name": "games", "columns": column_names}), 200
+        except (Exception, psycopg2.Error) as db_error:  # This line needs psycopg2
             if conn:
-                conn.close() # Ensure connection is closed in error case
-            return jsonify({"status": "Database query error", "error": str(db_error)}), 500 # Return error JSON
-    else: # If initial database connection failed
-        return jsonify({"status": "Database connection failed"}), 500 # Return connection failed JSON
+                conn.close()
+            return jsonify({"status": "Database query error", "error": str(db_error)}), 500
+    else:
+        return jsonify({"status": "Database connection failed"}), 500
 
 # --- 9.6: /hello_test_route - simple hello test route for Fly.io verification ---
 @app.route('/hello_test_route', methods=['GET'])
