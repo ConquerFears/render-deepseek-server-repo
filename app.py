@@ -171,6 +171,49 @@ def create_game_record(server_instance_id, player_usernames_list):
                 cur.close()
             conn.close()
 
+# Function to update the game status and player usernames in the database
+def update_game_status_and_usernames(game_id_str, player_usernames_list):
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            print("DB connection FAILED in update_game_status_and_usernames")
+            return False, "Database connection failed" # Return failure status and message
+
+        cur = conn.cursor()
+        player_usernames_str = ','.join(player_usernames_list) # Convert list to comma-separated string
+        sql_update = """
+            UPDATE games
+            SET status = 'active', player_usernames = %s
+            WHERE game_id = %s;
+        """
+        game_id_uuid = uuid.UUID(game_id_str) # Ensure game_id is UUID for query
+        cur.execute(sql_update, (player_usernames_str, game_id_uuid))
+        conn.commit()
+
+        if cur.rowcount > 0:
+            print(f"Game status updated to 'active' and usernames updated for game_id: {game_id_str}")
+            return True, f"Game status updated to 'active' and usernames updated for game_id: {game_id_str}" # Return success status and message
+        else:
+            error_msg = f"Game status update failed: game_id '{game_id_str}' not found or no update performed."
+            print(error_msg)
+            conn.rollback() # Rollback in case of unexpected issue
+            return False, error_msg # Return failure status and error message
+
+    except (Exception, psycopg2.Error) as error:
+        error_message = f"Database error updating game status and usernames: {error}"
+        traceback.print_exc() # More detailed error logging
+        if conn:
+            conn.rollback() # Rollback transaction in case of error
+        return False, error_message # Return failure status and error message
+
+    finally:
+        if conn:
+            if cur:
+                cur.close()
+            conn.close()
+
+
 # Function to create a new round record in the database (currently not used in game start)
 def create_round_record(game_id, round_number, round_type):
     conn = None
@@ -348,11 +391,11 @@ def game_start_signal():
         print(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}") # Log signal reception
 
         server_instance_id = str(uuid.uuid4()) # Generate a unique game ID
-        game_record_created = create_game_record(server_instance_id, player_usernames_list_from_roblox) # Create DB record
+        game_id_created = create_game_record(server_instance_id, player_usernames_list_from_roblox) # Create DB record
 
-        if game_record_created: # Check if database record creation was successful
-            print(f"game_start_signal: Game record CREATED successfully. Game ID: {game_record_created}")
-            return jsonify({"status": "success", "message": "Game start signal processed, game record created", "game_id": game_record_created}), 200, {'Content-Type': 'application/json'} # Return success JSON
+        if game_id_created: # Check if database record creation was successful
+            print(f"game_start_signal: Game record CREATED successfully. Game ID: {game_id_created}")
+            return jsonify({"status": "success", "message": "Game start signal processed, game record created", "game_id": game_id_created}), 200, {'Content-Type': 'application/json'} # Return success JSON
         else:
             print("game_start_signal: Game record creation FAILED.") # Log DB record creation failure
             return jsonify({"status": "error", "message": "Game record creation failed"}), 500, {'Content-Type': 'application/json'} # Return error JSON
@@ -431,6 +474,32 @@ def test_db_insert():
     finally: # Ensure connection is closed
         if conn:
             conn.close()
+
+# --- 9.8: /game_status_update route - endpoint to update game status and usernames ---
+@app.route('/game_status_update', methods=['POST'])
+def game_status_update():
+    """
+    Endpoint to update the status of a game record to 'active' AND update player usernames.
+    Expects a JSON payload with 'game_id' and 'player_usernames'.
+    """
+    data = request.get_json()
+    if not data or 'game_id' not in data or 'player_usernames' not in data:
+        return jsonify({"status": "error", "message": "Missing 'game_id' or 'player_usernames' in request body"}), 400
+
+    game_id_str = data['game_id']
+    player_usernames_list_from_roblox = data['player_usernames'] # Get usernames from request
+
+    try:
+        game_id_uuid = uuid.UUID(game_id_str) # Validate game_id format as UUID
+    except ValueError:
+        return jsonify({"status": "error", "message": "Invalid 'game_id' format (must be UUID)"}), 400
+
+    success, message = update_game_status_and_usernames(game_id_str, player_usernames_list_from_roblox) # Call combined update function
+
+    if success:
+        return jsonify({"status": "success", "message": message}), 200
+    else:
+        return jsonify({"status": "error", "message": message}), 500
 
 
 # ========================================================================
