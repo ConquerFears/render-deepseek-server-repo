@@ -24,6 +24,7 @@ from gemini_utils import (
     CACHE_EXPIRY_SECONDS, 
     create_dynamic_gemini_model
 )
+from functools import wraps
 
 # ========================================================================
 #                      SECTION 1:  FLASK APP INITIALIZATION
@@ -31,6 +32,18 @@ from gemini_utils import (
 
 app = Flask(__name__)
 
+# Add simple API key authentication
+API_KEY = os.environ.get("ROBLOX_API_KEY")
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        provided_key = request.headers.get('X-API-Key')
+        if provided_key and provided_key == API_KEY:
+            return f(*args, **kwargs)
+        else:
+            return jsonify({"status": "error", "message": "Invalid API key"}), 401
+    return decorated_function
 
 # ========================================================================
 #                      SECTION 9: FLASK ROUTE DEFINITIONS (ENDPOINTS)
@@ -44,6 +57,7 @@ def hello_world():
 
 # --- 9.2: /gemini_request route - main endpoint for AI requests from Roblox ---
 @app.route('/gemini_request', methods=['POST'])
+@require_api_key
 def gemini_request():
     global last_request_time  # Access the global rate limiting variable
 
@@ -174,6 +188,22 @@ def game_start_signal():
         traceback.print_exc() # More detailed error logging
         return jsonify({"status": "error", "message": "Internal server error"}), 500, {'Content-Type': 'application/json'} # Return generic server error
 
+# More structured input validation
+def validate_request_data(data, required_fields):
+    """Validate that request data contains all required fields"""
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        return False, f"Missing required fields: {', '.join(missing_fields)}"
+    return True, "Valid"
+
+@app.route('/game_start_signal', methods=['POST'])
+def game_start_signal():
+    data = request.get_json()
+    valid, message = validate_request_data(data, ['user_input', 'player_usernames'])
+    if not valid:
+        return jsonify({"status": "error", "message": message}), 400
+    
+    # Continue with your existing code
 
 # --- 9.4: /echo route - simple echo endpoint for testing Roblox communication ---
 @app.route('/echo', methods=['POST'])
@@ -365,3 +395,53 @@ def game_cleanup():
 if __name__ == '__main__':
     # Run the Flask app when this script is executed directly
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
+# Create a centralized error handler
+def handle_api_error(error, context="API operation"):
+    """Centralized error handler for API operations"""
+    error_message = f"Error during {context}: {str(error)}"
+    print(error_message)
+    traceback.print_exc()
+    return jsonify({
+        "status": "error",
+        "message": error_message
+    }), 500
+    
+# Usage in routes
+@app.route('/some_endpoint')
+def some_endpoint():
+    try:
+        # operation
+    except Exception as e:
+        return handle_api_error(e, "some endpoint operation")
+
+# Add OpenAPI/Swagger documentation
+
+"""
+@swagger.path('/gemini_request')
+@swagger.operation(
+    notes='Endpoint for AI requests from Roblox',
+    parameters=[
+        {
+            'name': 'user_input',
+            'description': 'The user input text to process',
+            'required': True,
+            'type': 'string',
+            'paramType': 'body'
+        }
+    ],
+    responseMessages=[
+        {
+            'code': 200,
+            'message': 'AI response text'
+        },
+        {
+            'code': 400,
+            'message': 'Missing user_input in request'
+        }
+    ]
+)
+"""
+@app.route('/gemini_request', methods=['POST'])
+def gemini_request():
+    # Your existing code

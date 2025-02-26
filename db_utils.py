@@ -2,6 +2,7 @@ import psycopg2
 import os
 import traceback
 import datetime
+from psycopg2 import pool
 
 # ========================================================================
 #                      SECTION 7: DATABASE HELPER FUNCTIONS
@@ -10,23 +11,34 @@ import datetime
 # Get the database URL from environment variables (for Neon Postgres)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Function to establish a database connection
-def get_db_connection():
-    conn = None
+# Create a connection pool instead of individual connections
+connection_pool = None
+
+def init_db_pool(min_conn=1, max_conn=10):
+    """Initialize the database connection pool"""
+    global connection_pool
     try:
-        print(f"Attempting to connect to database using DATABASE_URL: {DATABASE_URL}")
-        if not DATABASE_URL:
-            print("ERROR: DATABASE_URL is not set!")
-            return None
-        conn = psycopg2.connect(DATABASE_URL)
-        print("Database connection successful!")
-        return conn
-    except (Exception, psycopg2.Error) as error:
-        print(f"Error while connecting to PostgreSQL: {error}")
-        traceback.print_exc()
-        if conn:
-            conn.close()
+        connection_pool = pool.ThreadedConnectionPool(
+            min_conn, max_conn, DATABASE_URL
+        )
+        print(f"Connection pool created with {min_conn}-{max_conn} connections")
+        return True
+    except Exception as e:
+        print(f"Error creating connection pool: {e}")
+        return False
+
+def get_db_connection():
+    """Get a connection from the pool"""
+    if connection_pool:
+        return connection_pool.getconn()
+    else:
+        print("Connection pool not initialized")
         return None
+
+def release_db_connection(conn):
+    """Return a connection to the pool"""
+    if connection_pool and conn:
+        connection_pool.putconn(conn)
 
 # Function to create a new game record in the database
 def create_game_record(server_instance_id, player_usernames_list):
