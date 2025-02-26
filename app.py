@@ -11,7 +11,9 @@ from db_utils import (
     get_db_connection, 
     create_game_record, 
     update_game_status_and_usernames, 
-    create_round_record
+    create_round_record,
+    init_db_pool,
+    release_db_connection
 )
 from gemini_utils import (
     default_model, 
@@ -25,25 +27,60 @@ from gemini_utils import (
     create_dynamic_gemini_model
 )
 from functools import wraps
+import logging
 
 # ========================================================================
 #                      SECTION 1:  FLASK APP INITIALIZATION
 # ========================================================================
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Initialize Flask app
 app = Flask(__name__)
 
-# Add simple API key authentication
+# Add API key authentication
 API_KEY = os.environ.get("ROBLOX_API_KEY")
 
 def require_api_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         provided_key = request.headers.get('X-API-Key')
-        if provided_key and provided_key == API_KEY:
+        if API_KEY and provided_key == API_KEY:
+            return f(*args, **kwargs)
+        elif not API_KEY:
+            logger.warning("API_KEY not configured, skipping authentication")
             return f(*args, **kwargs)
         else:
             return jsonify({"status": "error", "message": "Invalid API key"}), 401
     return decorated_function
+
+# Create a centralized error handler
+def handle_api_error(error, context="API operation"):
+    """Centralized error handler for API operations"""
+    error_message = f"Error during {context}: {str(error)}"
+    logger.error(error_message)
+    traceback.print_exc()
+    return jsonify({
+        "status": "error",
+        "message": "Internal server error",
+        "detail": str(error) if app.debug else None
+    }), 500
+
+# Input validation helper
+def validate_request_data(data, required_fields):
+    """Validate that request data contains all required fields"""
+    if not data:
+        return False, "No data provided in request body"
+    
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        return False, f"Missing required fields: {', '.join(missing_fields)}"
+    return True, "Valid"
 
 # ========================================================================
 #                      SECTION 9: FLASK ROUTE DEFINITIONS (ENDPOINTS)
@@ -52,110 +89,109 @@ def require_api_key(f):
 # --- 9.1: Root route - simple hello world for testing ---
 @app.route('/', methods=['GET'])
 def hello_world():
-    print(f"Checking DATABASE_URL in root route: {DATABASE_URL}")
+    logger.info(f"Root route accessed, DATABASE_URL configured: {bool(DATABASE_URL)}")
     return 'Hello, World! This is your Fly.io server with Postgres!'
 
 # --- 9.2: /gemini_request route - main endpoint for AI requests from Roblox ---
 @app.route('/gemini_request', methods=['POST'])
 @require_api_key
 def gemini_request():
-    global last_request_time  # Access the global rate limiting variable
-
+    global last_request_time
+    
     try:
-        data = request.get_json() # Get JSON data from Roblox request
-        if not data or 'user_input' not in data:
-            return "No 'user_input' provided in request body", 400, {'Content-Type': 'text/plain'}
+        data = request.get_json()
+        valid, message = validate_request_data(data, ['user_input'])
+        if not valid:
+            return message, 400, {'Content-Type': 'text/plain'}
 
-        user_text = data['user_input'].strip() # Extract and clean user input
+        user_text = data['user_input'].strip()
 
-        # Input filtering to avoid unnecessary Gemini calls for empty or generic queries
+        # Input filtering
         if not user_text:
-            print("Blocked empty query, no Gemini call.")
+            logger.info("Blocked empty query, no Gemini call.")
             return "", 200, {'Content-Type': 'text/plain'}
         if len(user_text) < 5 and user_text.lower() in ["hi", "hello", "hey"]:
-            print(f"Blocked short, generic query: '{user_text}', no Gemini call.")
+            logger.info(f"Blocked short, generic query: '{user_text}', no Gemini call.")
             return "SERAPH: Greetings.", 200, {'Content-Type': 'text/plain'}
 
-        print(f"Received input from Roblox: {user_text}") # Log the received input
+        logger.info(f"Received input from Roblox: {user_text}")
 
-        current_system_prompt = system_prompt       # Default to general system prompt
-        current_temperature = generation_config["temperature"] # Default temperature
-        game_id_response = None # Not currently used in this function
+        current_system_prompt = system_prompt
+        current_temperature = generation_config["temperature"]
+        game_id_response = None
 
-        # Check if the user input indicates a round start signal
+        # Check if round start
         if user_text.startswith("Round start initiated"):
-            current_system_prompt = round_start_system_prompt # Use round start specific prompt
-            current_temperature = 0.25               # Lower temperature for round start announcements
-            print("Using ROUND START system prompt...")
+            current_system_prompt = round_start_system_prompt
+            current_temperature = 0.25
+            logger.info("Using ROUND START system prompt...")
 
-            print("/gemini_request (Round Start): Database record creation is handled by /game_start_signal endpoint.")
-
-            # --- Caching Logic (for Round Start Announcements) ---
-            cache_key = user_text # Use user input as cache key (should always be the same for round start)
-            cached_response_data = response_cache.get(cache_key) # Check for cached response
+            # Caching Logic
+            cache_key = user_text
+            cached_response_data = response_cache.get(cache_key)
 
             if cached_response_data and (time.time() - cached_response_data['timestamp'] < CACHE_EXPIRY_SECONDS):
-                print(f"Serving cached response for: {user_text}") # Log cache hit
-                gemini_text_response = cached_response_data['response'] # Get cached response
-                return gemini_text_response, 200, {'Content-Type': 'text/plain'} # Return cached response
+                logger.info(f"Serving cached response for: {user_text}")
+                gemini_text_response = cached_response_data['response']
+                return gemini_text_response, 200, {'Content-Type': 'text/plain'}
 
-            # --- Rate Limiting Logic ---
+            # Rate Limiting Logic
             current_time = time.time()
             time_since_last_request = current_time - last_request_time
             if time_since_last_request < REQUEST_LIMIT_SECONDS:
-                print("Request throttled - waiting before Gemini API call.")
-                time.sleep(REQUEST_LIMIT_SECONDS - time_since_last_request) # Wait to enforce rate limit
-            last_request_time = current_time # Update last request time
+                logger.info("Request throttled - waiting before Gemini API call.")
+                time.sleep(REQUEST_LIMIT_SECONDS - time_since_last_request)
+            last_request_time = current_time
 
-            dynamic_model = create_dynamic_gemini_model(current_temperature) # Create Gemini model with specific temperature
-            print("gemini_request: Calling dynamic_model.generate_content...") # Log API call start
+            dynamic_model = create_dynamic_gemini_model(current_temperature)
+            logger.info("gemini_request: Calling dynamic_model.generate_content...")
             try:
-                response = dynamic_model.generate_content( # Make the Gemini API call
+                response = dynamic_model.generate_content(
                     [
-                        {"role": "user", "parts": [current_system_prompt, user_text]}, # Combine system prompt and user input
+                        {"role": "user", "parts": [current_system_prompt, user_text]},
                     ]
                 )
-                print("gemini_request: dynamic_model.generate_content call RETURNED.") # Log API call return
-                print(f"gemini_request: Raw response.text: {response.text}")       # Log raw response
-                gemini_text_response = response.text.strip()                      # Clean up response
-                print(f"gemini_request: Gemini Response (Stripped): {gemini_text_response}") # Log cleaned response
+                logger.info("gemini_request: dynamic_model.generate_content call RETURNED.")
+                logger.debug(f"gemini_request: Raw response.text: {response.text}")
+                gemini_text_response = response.text.strip()
+                logger.info(f"gemini_request: Gemini Response (Stripped): {gemini_text_response}")
 
-                # --- Cache the new Gemini response ---
+                # Cache the new Gemini response
                 response_cache[cache_key] = {
                     'response': gemini_text_response,
                     'timestamp': time.time()
                 }
-                print(f"Caching new response for: {user_text}") # Log caching
+                logger.info(f"Caching new response for: {user_text}")
 
-                return gemini_text_response, 200, {'Content-Type': 'text/plain', 'Content-Length': str(len(gemini_text_response))} # Return response to Roblox
+                return gemini_text_response, 200, {'Content-Type': 'text/plain', 'Content-Length': str(len(gemini_text_response))}
 
-            except Exception as gemini_error: # Handle errors during Gemini API call
-                print(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}")
-                return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'} # Return error response
+            except Exception as gemini_error:
+                logger.error(f"gemini_request (Round Start): ERROR calling Gemini API: {gemini_error}")
+                return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
 
-        else: # For general user inputs (not round start)
-            print("Using GENERAL system prompt...") # Log prompt type
-            dynamic_model = create_dynamic_gemini_model(current_temperature) # Create Gemini model with default temperature
+        else:
+            logger.info("Using GENERAL system prompt...")
+            dynamic_model = create_dynamic_gemini_model(current_temperature)
             try:
-                response = dynamic_model.generate_content( # Call Gemini API with general prompt
+                response = dynamic_model.generate_content(
                     [
-                        {"role": "user", "parts": [current_system_prompt, user_text]}, # Combine general system prompt and user input
+                        {"role": "user", "parts": [current_system_prompt, user_text]},
                     ]
                 )
-                gemini_text_response = response.text.strip() # Clean up response
-                print(f"Gemini Response (General): {gemini_text_response}") # Log general response
-                return gemini_text_response, 200, {'Content-Type': 'text/plain'} # Return general response
+                gemini_text_response = response.text.strip()
+                logger.info(f"Gemini Response (General): {gemini_text_response}")
+                return gemini_text_response, 200, {'Content-Type': 'text/plain'}
 
-            except Exception as gemini_error: # Handle Gemini API errors for general requests
-                print(f"Error calling Gemini API (General): {gemini_error}")
-                return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'} # Return error response
+            except Exception as gemini_error:
+                logger.error(f"Error calling Gemini API (General): {gemini_error}")
+                return "Error communicating with Gemini API", 500, {'Content-Type': 'text/plain'}
 
-    except Exception as e: # Handle any other errors during request processing
-        traceback.print_exc() # More detailed error logging
-        return "Internal server error", 500, {'Content-Type': 'text/plain'} # Return generic server error
+    except Exception as e:
+        return handle_api_error(e, "gemini_request processing")
 
 # --- 9.3: /game_start_signal route - endpoint for Roblox to signal game start ---
 @app.route('/game_start_signal', methods=['POST'])
+@require_api_key
 def game_start_signal():
     """
     Endpoint to handle game start signals from Roblox.
@@ -163,71 +199,57 @@ def game_start_signal():
     Returns a JSON response indicating success or failure.
     """
     try:
-        data = request.get_json() # Get JSON data from Roblox
-        # Validate request body - ensure 'user_input' and 'player_usernames' are present
-        if not data or 'user_input' not in data or 'player_usernames' not in data:
-            print("game_start_signal: Invalid request body")
-            return jsonify({"status": "error", "message": "Invalid request body"}), 400, {'Content-Type': 'application/json'}
+        data = request.get_json()
+        valid, message = validate_request_data(data, ['user_input', 'player_usernames'])
+        if not valid:
+            logger.warning(f"game_start_signal: {message}")
+            return jsonify({"status": "error", "message": message}), 400
 
-        user_input = data['user_input'].strip() # Extract user input (for context/logging)
-        player_usernames_list_from_roblox = data.get('player_usernames', []) # Extract player usernames list
-        print(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}") # Log signal reception
+        user_input = data['user_input'].strip()
+        player_usernames_list_from_roblox = data.get('player_usernames', [])
+        logger.info(f"Game Start Signal Received from Roblox. Usernames: {player_usernames_list_from_roblox}")
 
-        server_instance_id = str(uuid.uuid4()) # Generate a unique game ID
-        game_id_created = create_game_record(server_instance_id, player_usernames_list_from_roblox) # Create DB record
+        server_instance_id = str(uuid.uuid4())
+        game_id_created = create_game_record(server_instance_id, player_usernames_list_from_roblox)
 
-        if game_id_created: # Check if database record creation was successful
-            print(f"game_start_signal: Game record CREATED successfully. Game ID: {game_id_created}")
-            return jsonify({"status": "success", "message": "Game start signal processed, game record created", "game_id": game_id_created}), 200, {'Content-Type': 'application/json'} # Return success JSON
+        if game_id_created:
+            logger.info(f"game_start_signal: Game record CREATED successfully. Game ID: {game_id_created}")
+            return jsonify({
+                "status": "success", 
+                "message": "Game start signal processed, game record created", 
+                "game_id": game_id_created
+            }), 200
         else:
-            print("game_start_signal: Game record creation FAILED.") # Log DB record creation failure
-            return jsonify({"status": "error", "message": "Game record creation failed"}), 500, {'Content-Type': 'application/json'} # Return error JSON
+            logger.error("game_start_signal: Game record creation FAILED.")
+            return jsonify({"status": "error", "message": "Game record creation failed"}), 500
 
-    except Exception as e: # Handle any errors during game start signal processing
-        error_message = f"game_start_signal: ERROR processing /game_start_signal request: {e}"
-        traceback.print_exc() # More detailed error logging
-        return jsonify({"status": "error", "message": "Internal server error"}), 500, {'Content-Type': 'application/json'} # Return generic server error
-
-# More structured input validation
-def validate_request_data(data, required_fields):
-    """Validate that request data contains all required fields"""
-    missing_fields = [field for field in required_fields if field not in data]
-    if missing_fields:
-        return False, f"Missing required fields: {', '.join(missing_fields)}"
-    return True, "Valid"
-
-@app.route('/game_start_signal', methods=['POST'])
-def game_start_signal():
-    data = request.get_json()
-    valid, message = validate_request_data(data, ['user_input', 'player_usernames'])
-    if not valid:
-        return jsonify({"status": "error", "message": message}), 400
-    
-    # Continue with your existing code
+    except Exception as e:
+        return handle_api_error(e, "game_start_signal processing")
 
 # --- 9.4: /echo route - simple echo endpoint for testing Roblox communication ---
 @app.route('/echo', methods=['POST'])
 def echo_input():
     try:
-        data = request.get_json() # Get JSON data from Roblox
-        if not data or 'user_input' not in data: # Validate request body
-            return "No 'user_input' provided in request body", 400, {'Content-Type': 'text/plain'}
+        data = request.get_json()
+        valid, message = validate_request_data(data, ['user_input'])
+        if not valid:
+            return message, 400, {'Content-Type': 'text/plain'}
 
-        user_text = data['user_input'] # Extract user input
-        print(f"Echoing back to Roblox: {user_text}") # Log echoing
-        return user_text, 200, {'Content-Type': 'text/plain'} # Return the input back as plain text
+        user_text = data['user_input']
+        logger.info(f"Echoing back to Roblox: {user_text}")
+        return user_text, 200, {'Content-Type': 'text/plain'}
 
-    except Exception as e: # Handle any errors in echo endpoint
-        print(f"Error in /echo endpoint: {e}")
-        return "Error processing echo request", 500, {'Content-Type': 'text/plain'} # Return error message
+    except Exception as e:
+        return handle_api_error(e, "echo endpoint")
 
 # --- 9.5: /test_db route - endpoint to test database connection and schema ---
 @app.route('/test_db', methods=['GET'])
 def test_db_connection():
-    print("Entering /test_db route... (schema inspection version)")
-    conn = get_db_connection()
-    if conn:
-        try:
+    logger.info("Entering /test_db route... (schema inspection version)")
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn:
             cur = conn.cursor()
             cur.execute("""
                 SELECT column_name, data_type
@@ -238,28 +260,27 @@ def test_db_connection():
             columns_info = cur.fetchall()
             column_names = [(name, data_type) for name, data_type in columns_info]
             cur.close()
-            conn.close()
             return jsonify({"status": "Database connection successful", "table_name": "games", "columns": column_names}), 200
-        except (Exception, psycopg2.Error) as db_error:  # This line needs psycopg2
-            if conn:
-                conn.close()
-            return jsonify({"status": "Database query error", "error": str(db_error)}), 500
-    else:
-        return jsonify({"status": "Database connection failed"}), 500
+        else:
+            return jsonify({"status": "Database connection failed"}), 500
+    except Exception as e:
+        return handle_api_error(e, "database test")
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # --- 9.6: /hello_test_route - simple hello test route for Fly.io verification ---
 @app.route('/hello_test_route', methods=['GET'])
 def hello_test_route():
-    print("Accessed /hello_test_route endpoint!")
-    return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'} # Return simple text response
-
+    logger.info("Accessed /hello_test_route endpoint!")
+    return "Hello from Fly.io! This is a test route.", 200, {'Content-Type': 'text/plain'}
 
 # --- 9.7: /test_db_insert route - endpoint to test database INSERT operation ---
 @app.route('/test_db_insert', methods=['GET'])
 def test_db_insert():
     conn = None
     try:
-        conn = get_db_connection()  # Use the helper function
+        conn = get_db_connection()
         if conn is None:
             return jsonify({"message": "Failed to connect to database", "status": "error"})
         cur = conn.cursor()
@@ -268,43 +289,40 @@ def test_db_insert():
         cur.close()
         return jsonify({"message": "Data inserted successfully into games table", "status": "success"})
     except Exception as e:
-        if conn:
-            conn.rollback()
-        traceback.print_exc()
-        return jsonify({"message": "Failed to create game record.", "status": "error"})
+        return handle_api_error(e, "database insert test")
     finally:
         if conn:
-            conn.close()
+            release_db_connection(conn)
 
 # --- 9.8: /game_status_update route - endpoint to update game status and usernames ---
 @app.route('/game_status_update', methods=['POST'])
+@require_api_key
 def game_status_update():
     """
     Endpoint to update the status of a game record to 'active' AND update player usernames.
     Expects a JSON payload with 'game_id' and 'player_usernames'.
     """
-    data = request.get_json()
-    if not data or 'game_id' not in data or 'player_usernames' not in data:
-        return jsonify({"status": "error", "message": "Missing 'game_id' or 'player_usernames' in request body"}), 400
+    try:
+        data = request.get_json()
+        valid, message = validate_request_data(data, ['game_id', 'player_usernames'])
+        if not valid:
+            return jsonify({"status": "error", "message": message}), 400
 
-    game_id_str = data['game_id']
-    player_usernames_list_from_roblox = data['player_usernames'] # Get usernames from request
+        game_id_str = data['game_id']
+        player_usernames_list_from_roblox = data['player_usernames']
 
-    # --- NO NEED TO CONVERT TO UUID OBJECT HERE ---
-    # try:
-    #     game_id_uuid = uuid.UUID(game_id_str) # Validate game_id format as UUID
-    # except ValueError:
-    #     return jsonify({"status": "error", "message": "Invalid 'game_id' format (must be UUID)"}), 400
+        success, message = update_game_status_and_usernames(game_id_str, player_usernames_list_from_roblox)
 
-    success, message = update_game_status_and_usernames(game_id_str, player_usernames_list_from_roblox) # Call combined update function
-
-    if success:
-        return jsonify({"status": "success", "message": message}), 200
-    else:
-        return jsonify({"status": "error", "message": message}), 500
+        if success:
+            return jsonify({"status": "success", "message": message}), 200
+        else:
+            return jsonify({"status": "error", "message": message}), 500
+    except Exception as e:
+        return handle_api_error(e, "game status update")
 
 # --- 9.9: /game_cleanup route - endpoint to handle game cleanup when a Roblox server shuts down ---
 @app.route('/game_cleanup', methods=['POST'])
+@require_api_key
 def game_cleanup():
     """
     Endpoint to handle game cleanup when a Roblox server shuts down.
@@ -313,19 +331,17 @@ def game_cleanup():
     """
     try:
         data = request.get_json()
-        if not data or 'game_id' not in data:
-            print("game_cleanup: Missing game_id in request")
-            return jsonify({
-                "status": "error",
-                "message": "Missing game_id in request"
-            }), 400
+        valid, message = validate_request_data(data, ['game_id'])
+        if not valid:
+            logger.warning(f"game_cleanup: {message}")
+            return jsonify({"status": "error", "message": message}), 400
 
         game_id = data['game_id']
-        print(f"game_cleanup: Received cleanup request for game_id: {game_id}")
+        logger.info(f"game_cleanup: Received cleanup request for game_id: {game_id}")
 
         # Handle the "UNKNOWN_GAME_ID" case from Roblox
         if game_id == "UNKNOWN_GAME_ID":
-            print("game_cleanup: Received UNKNOWN_GAME_ID, skipping cleanup")
+            logger.info("game_cleanup: Received UNKNOWN_GAME_ID, skipping cleanup")
             return jsonify({
                 "status": "warning",
                 "message": "Skipped cleanup for UNKNOWN_GAME_ID"
@@ -347,7 +363,7 @@ def game_cleanup():
             game = cur.fetchone()
             
             if not game:
-                print(f"game_cleanup: No game found with ID: {game_id}")
+                logger.warning(f"game_cleanup: No game found with ID: {game_id}")
                 return jsonify({
                     "status": "warning",
                     "message": f"No game found with ID: {game_id}"
@@ -357,91 +373,30 @@ def game_cleanup():
             cur.execute("DELETE FROM games WHERE game_id = %s", (game_id,))
             conn.commit()
             
-            print(f"game_cleanup: Successfully deleted game {game_id}")
+            logger.info(f"game_cleanup: Successfully deleted game {game_id}")
             return jsonify({
                 "status": "success",
                 "message": f"Game {game_id} cleaned up successfully"
             }), 200
 
         except Exception as db_error:
-            print(f"game_cleanup: Database error: {db_error}")
-            traceback.print_exc()
-            if conn:
-                conn.rollback()
-            return jsonify({
-                "status": "error",
-                "message": f"Database error: {str(db_error)}"
-            }), 500
-
+            return handle_api_error(db_error, "game cleanup database operation")
         finally:
             if conn:
                 if cur:
                     cur.close()
-                conn.close()
+                release_db_connection(conn)
 
     except Exception as e:
-        print(f"game_cleanup: Unexpected error: {e}")
-        traceback.print_exc()
-        return jsonify({
-            "status": "error",
-            "message": f"Server error: {str(e)}"
-        }), 500
-
+        return handle_api_error(e, "game cleanup")
 
 # ========================================================================
 #                      SECTION 10: MAIN APPLICATION START
 # ========================================================================
 
 if __name__ == '__main__':
-    # Run the Flask app when this script is executed directly
+    # Initialize database connection pool
+    init_db_pool(min_conn=1, max_conn=10)
+    logger.info("Starting Flask application...")
+    # Run the Flask app
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-
-# Create a centralized error handler
-def handle_api_error(error, context="API operation"):
-    """Centralized error handler for API operations"""
-    error_message = f"Error during {context}: {str(error)}"
-    print(error_message)
-    traceback.print_exc()
-    return jsonify({
-        "status": "error",
-        "message": error_message
-    }), 500
-    
-# Usage in routes
-@app.route('/some_endpoint')
-def some_endpoint():
-    try:
-        # operation
-    except Exception as e:
-        return handle_api_error(e, "some endpoint operation")
-
-# Add OpenAPI/Swagger documentation
-
-"""
-@swagger.path('/gemini_request')
-@swagger.operation(
-    notes='Endpoint for AI requests from Roblox',
-    parameters=[
-        {
-            'name': 'user_input',
-            'description': 'The user input text to process',
-            'required': True,
-            'type': 'string',
-            'paramType': 'body'
-        }
-    ],
-    responseMessages=[
-        {
-            'code': 200,
-            'message': 'AI response text'
-        },
-        {
-            'code': 400,
-            'message': 'Missing user_input in request'
-        }
-    ]
-)
-"""
-@app.route('/gemini_request', methods=['POST'])
-def gemini_request():
-    # Your existing code

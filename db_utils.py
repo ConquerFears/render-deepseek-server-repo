@@ -3,6 +3,7 @@ import os
 import traceback
 import datetime
 from psycopg2 import pool
+import logging
 
 # ========================================================================
 #                      SECTION 7: DATABASE HELPER FUNCTIONS
@@ -43,10 +44,11 @@ def release_db_connection(conn):
 # Function to create a new game record in the database
 def create_game_record(server_instance_id, player_usernames_list):
     conn = None
+    cur = None
     try:
         conn = get_db_connection()
         if conn is None:
-            print("DB connection FAILED")
+            logger.error("DB connection FAILED")
             return None
         cur = conn.cursor()
 
@@ -63,7 +65,7 @@ def create_game_record(server_instance_id, player_usernames_list):
 
         if cur.rowcount == 0:
             error_msg = f"INSERT failed, 0 rows affected. Status: {cur.statusmessage}"
-            print(error_msg)
+            logger.error(error_msg)
             conn.rollback()
             return None
 
@@ -73,16 +75,17 @@ def create_game_record(server_instance_id, player_usernames_list):
 
     except (Exception, psycopg2.Error) as error:
         error_msg = f"DB INSERT error: {error}"
-        traceback.print_exc()  # More detailed error logging
+        logger.error(error_msg)
+        traceback.print_exc()
         if conn:
             conn.rollback()
         return None
 
     finally:
+        if cur:
+            cur.close()
         if conn:
-            if cur:
-                cur.close()
-            conn.close()
+            release_db_connection(conn)
 
 # Function to update the game status and player usernames in the database
 def update_game_status_and_usernames(game_id_str, player_usernames_list):
