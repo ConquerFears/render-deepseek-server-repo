@@ -13,7 +13,8 @@ from db_utils import (
     update_game_status_and_usernames, 
     create_round_record,
     init_db_pool,
-    release_db_connection
+    release_db_connection,
+    connection_pool
 )
 from gemini_utils import (
     default_model, 
@@ -26,7 +27,6 @@ from gemini_utils import (
     CACHE_EXPIRY_SECONDS, 
     create_dynamic_gemini_model
 )
-from functools import wraps
 import logging
 
 # ========================================================================
@@ -42,22 +42,6 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
-
-# Add API key authentication
-API_KEY = os.environ.get("ROBLOX_API_KEY")
-
-def require_api_key(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        provided_key = request.headers.get('X-API-Key')
-        if API_KEY and provided_key == API_KEY:
-            return f(*args, **kwargs)
-        elif not API_KEY:
-            logger.warning("API_KEY not configured, skipping authentication")
-            return f(*args, **kwargs)
-        else:
-            return jsonify({"status": "error", "message": "Invalid API key"}), 401
-    return decorated_function
 
 # Create a centralized error handler
 def handle_api_error(error, context="API operation"):
@@ -94,7 +78,6 @@ def hello_world():
 
 # --- 9.2: /gemini_request route - main endpoint for AI requests from Roblox ---
 @app.route('/gemini_request', methods=['POST'])
-@require_api_key
 def gemini_request():
     global last_request_time
     
@@ -118,7 +101,6 @@ def gemini_request():
 
         current_system_prompt = system_prompt
         current_temperature = generation_config["temperature"]
-        game_id_response = None
 
         # Check if round start
         if user_text.startswith("Round start initiated"):
@@ -191,7 +173,6 @@ def gemini_request():
 
 # --- 9.3: /game_start_signal route - endpoint for Roblox to signal game start ---
 @app.route('/game_start_signal', methods=['POST'])
-@require_api_key
 def game_start_signal():
     """
     Endpoint to handle game start signals from Roblox.
@@ -296,7 +277,6 @@ def test_db_insert():
 
 # --- 9.8: /game_status_update route - endpoint to update game status and usernames ---
 @app.route('/game_status_update', methods=['POST'])
-@require_api_key
 def game_status_update():
     """
     Endpoint to update the status of a game record to 'active' AND update player usernames.
@@ -322,7 +302,6 @@ def game_status_update():
 
 # --- 9.9: /game_cleanup route - endpoint to handle game cleanup when a Roblox server shuts down ---
 @app.route('/game_cleanup', methods=['POST'])
-@require_api_key
 def game_cleanup():
     """
     Endpoint to handle game cleanup when a Roblox server shuts down.
@@ -348,6 +327,7 @@ def game_cleanup():
             }), 200
 
         conn = None
+        cur = None
         try:
             conn = get_db_connection()
             if conn is None:
@@ -382,13 +362,58 @@ def game_cleanup():
         except Exception as db_error:
             return handle_api_error(db_error, "game cleanup database operation")
         finally:
+            if cur:
+                cur.close()
             if conn:
-                if cur:
-                    cur.close()
                 release_db_connection(conn)
 
     except Exception as e:
         return handle_api_error(e, "game cleanup")
+
+# --- 9.10: /debug_info route - endpoint to check system configuration ---
+@app.route('/debug_info', methods=['GET'])
+def debug_info():
+    """
+    Return information about the system configuration for debugging.
+    Does not expose actual secret values.
+    """
+    info = {
+        "database": {
+            "url_configured": bool(DATABASE_URL),
+            "connection_pool": {
+                "initialized": connection_pool is not None,
+                "min_connections": 1,
+                "max_connections": 10
+            }
+        },
+        "security": {
+            "gemini_key_configured": bool(os.environ.get("GEMINI_API_KEY"))
+        },
+        "timestamp": datetime.datetime.now().isoformat(),
+        "flask_debug_mode": app.debug
+    }
+    
+    # Try a test connection
+    conn = None
+    try:
+        conn = get_db_connection()
+        info["database"]["test_connection"] = "success" if conn else "failed"
+        
+        if conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            info["database"]["query_test"] = "success"
+            cur.close()
+        else:
+            info["database"]["query_test"] = "not_attempted"
+    except Exception as e:
+        info["database"]["error"] = str(e)
+        info["database"]["query_test"] = "error"
+    finally:
+        if conn:
+            release_db_connection(conn)
+    
+    return jsonify(info)
 
 # ========================================================================
 #                      SECTION 10: MAIN APPLICATION START
@@ -396,7 +421,15 @@ def game_cleanup():
 
 if __name__ == '__main__':
     # Initialize database connection pool
-    init_db_pool(min_conn=1, max_conn=10)
+    logger.info("Initializing database connection pool...")
+    pool_initialized = init_db_pool(min_conn=1, max_conn=10)
+    if not pool_initialized:
+        logger.warning("Failed to initialize connection pool, will use direct connections")
+    
+    # Log configuration state for debugging
+    logger.info(f"Configuration: DATABASE_URL configured: {bool(DATABASE_URL)}")
+    logger.info(f"Configuration: GEMINI_API_KEY configured: {bool(os.environ.get('GEMINI_API_KEY'))}")
+    
     logger.info("Starting Flask application...")
     # Run the Flask app
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
