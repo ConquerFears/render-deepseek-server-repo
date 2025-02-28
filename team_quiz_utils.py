@@ -48,7 +48,7 @@ try:
         },
         {
             "category": "HARM_CATEGORY_CIVIC_INTEGRITY",
-            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
+            "threshold": "BLOCK_NONE",  # Block most
         },
     ]
 
