@@ -44,7 +44,8 @@ from gemini_utils import (
 # Import team quiz utilities
 from team_quiz_utils import (
     process_team_quiz_request,      # Process team quiz requests and get Gemini responses
-    TEAM_INFO                       # Team definitions and their traits
+    TEAM_INFO,                      # Team definitions and their traits
+    GEMINI_AVAILABLE                # Flag indicating if the Gemini API is available
 )
 
 # Logging - For tracking application activity and errors

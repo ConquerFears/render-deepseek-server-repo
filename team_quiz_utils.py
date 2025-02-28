@@ -14,80 +14,83 @@ logger = logging.getLogger(__name__)  # Create a logger for this module
 # We wrap this in a try-except block to handle cases where the package isn't installed
 GEMINI_AVAILABLE = False
 try:
-    from google import genai     # Google's Generative AI library
-    from google.genai import types  # Type definitions for Gemini API
+    import google.generativeai as genai  # Google's Gemini AI API client library
     GEMINI_AVAILABLE = True
     logger.info("Successfully imported google-generativeai package")
+    
+    # Get Gemini API key from environment variable
+    GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")
+    
+    # Configure the Gemini API with our key
+    if GOOGLE_API_KEY:
+        genai.configure(api_key=GOOGLE_API_KEY)
     
     # Gemini API configuration for team quiz
     GEMINI_MODEL = "gemini-2.0-flash"  # Using the fast version of Gemini 2.0
 
     # Safety settings to ensure appropriate content for children
     SAFETY_SETTINGS = [
-        types.SafetySetting(
-            category="HARM_CATEGORY_HARASSMENT",
-            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-        ),
-        types.SafetySetting(
-            category="HARM_CATEGORY_HATE_SPEECH",
-            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-        ),
-        types.SafetySetting(
-            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-        ),
-        types.SafetySetting(
-            category="HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-        ),
-        types.SafetySetting(
-            category="HARM_CATEGORY_CIVIC_INTEGRITY",
-            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-        ),
+        {
+            "category": "HARM_CATEGORY_HARASSMENT",
+            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
+        },
+        {
+            "category": "HARM_CATEGORY_HATE_SPEECH",
+            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
+        },
+        {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
+        },
+        {
+            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
+        },
+        {
+            "category": "HARM_CATEGORY_CIVIC_INTEGRITY",
+            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
+        },
     ]
 
     # Response schema for structured JSON output from Gemini
-    RESPONSE_SCHEMA = types.Schema(
-        type=types.Type.OBJECT,
-        enum=[],
-        required=["questions"],
-        properties={
-            "questions": types.Schema(
-                type=types.Type.ARRAY,
-                description="List of quiz questions.",
-                items=types.Schema(
-                    type=types.Type.OBJECT,
-                    enum=[],
-                    required=["question_text", "answer_choices"],
-                    properties={
-                        "question_text": types.Schema(
-                            type=types.Type.STRING,
-                            description="The quiz question being asked.",
-                        ),
-                        "answer_choices": types.Schema(
-                            type=types.Type.ARRAY,
-                            description="Four answer choices.",
-                            items=types.Schema(
-                                type=types.Type.OBJECT,
-                                enum=[],
-                                required=["choice_text", "corresponding_category"],
-                                properties={
-                                    "choice_text": types.Schema(
-                                        type=types.Type.STRING,
-                                        description="The text of the answer choice.",
-                                    ),
-                                    "corresponding_category": types.Schema(
-                                        type=types.Type.STRING,
-                                        description="The category this choice corresponds to (filled by Gemini).",
-                                    ),
+    RESPONSE_SCHEMA = {
+        "type": "OBJECT",
+        "required": ["questions"],
+        "properties": {
+            "questions": {
+                "type": "ARRAY",
+                "description": "List of quiz questions.",
+                "items": {
+                    "type": "OBJECT",
+                    "required": ["question_text", "answer_choices"],
+                    "properties": {
+                        "question_text": {
+                            "type": "STRING",
+                            "description": "The quiz question being asked.",
+                        },
+                        "answer_choices": {
+                            "type": "ARRAY",
+                            "description": "Four answer choices.",
+                            "items": {
+                                "type": "OBJECT",
+                                "required": ["choice_text", "corresponding_category"],
+                                "properties": {
+                                    "choice_text": {
+                                        "type": "STRING",
+                                        "description": "The text of the answer choice.",
+                                    },
+                                    "corresponding_category": {
+                                        "type": "STRING",
+                                        "description": "The category this choice corresponds to (filled by Gemini).",
+                                    },
                                 },
-                            ),
-                        ),
+                            },
+                        },
                     },
-                ),
-            ),
+                },
+            },
         },
-    )
+    }
 except ImportError:
     logger.error("Cannot import google-generativeai. This functionality will be disabled.")
     logger.error("Please install with: pip install google-generativeai")
@@ -313,44 +316,35 @@ def get_gemini_quiz_response(selected_teams):
         return get_fallback_quiz_questions(selected_teams)
         
     try:
-        # Get API key from environment
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
+        # Check if API key is configured
+        if not os.environ.get("GEMINI_API_KEY"):
             logger.error("GEMINI_API_KEY environment variable not set")
             return get_fallback_quiz_questions(selected_teams)
             
-        # Initialize the Gemini client
-        client = genai.Client(api_key=api_key)
-        
         # Create the prompt for Gemini
         prompt = create_team_prompt(selected_teams)
         logger.debug(f"Generated prompt for Gemini: {prompt[:100]}...")
         
-        # Configure the generation parameters
-        generate_content_config = types.GenerateContentConfig(
-            temperature=0.65,  # Balanced between creativity and consistency
-            top_p=0.9,
-            top_k=40,
-            max_output_tokens=1500,  # Generous limit for 5 questions
-            safety_settings=SAFETY_SETTINGS,
-            response_mime_type="application/json",
-            response_schema=RESPONSE_SCHEMA,
+        # Create a model using the same pattern as the working gemini_utils.py
+        model = genai.GenerativeModel(
+            model_name=GEMINI_MODEL,
+            generation_config={
+                "temperature": 0.65,
+                "top_p": 0.9,
+                "top_k": 40,
+                "max_output_tokens": 1500,
+                "response_mime_type": "application/json",
+            },
+            safety_settings=SAFETY_SETTINGS
         )
-        
-        # Create the content for the API request
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)],
-            ),
-        ]
         
         # Call the Gemini API
         logger.info("Calling Gemini API to generate quiz questions")
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=contents,
-            config=generate_content_config,
+        response = model.generate_content(
+            contents=[
+                {"role": "user", "parts": [prompt]}
+            ],
+            generation_config={"response_schema": RESPONSE_SCHEMA}
         )
         
         # Parse the response
