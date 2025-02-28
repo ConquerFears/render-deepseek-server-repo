@@ -6,11 +6,91 @@
 import os                    # For accessing environment variables
 import json                  # For handling JSON data
 import logging               # For logging errors and information
-from google import genai     # Google's Generative AI library
-from google.genai import types  # Type definitions for Gemini API
 
 # Setup logging
 logger = logging.getLogger(__name__)  # Create a logger for this module
+
+# Try to import Google Generative AI library
+# We wrap this in a try-except block to handle cases where the package isn't installed
+GEMINI_AVAILABLE = False
+try:
+    from google import genai     # Google's Generative AI library
+    from google.genai import types  # Type definitions for Gemini API
+    GEMINI_AVAILABLE = True
+    logger.info("Successfully imported google-generativeai package")
+    
+    # Gemini API configuration for team quiz
+    GEMINI_MODEL = "gemini-2.0-flash"  # Using the fast version of Gemini 2.0
+
+    # Safety settings to ensure appropriate content for children
+    SAFETY_SETTINGS = [
+        types.SafetySetting(
+            category="HARM_CATEGORY_HARASSMENT",
+            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
+        ),
+        types.SafetySetting(
+            category="HARM_CATEGORY_HATE_SPEECH",
+            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
+        ),
+        types.SafetySetting(
+            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
+        ),
+        types.SafetySetting(
+            category="HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
+        ),
+        types.SafetySetting(
+            category="HARM_CATEGORY_CIVIC_INTEGRITY",
+            threshold="BLOCK_LOW_AND_ABOVE",  # Block most
+        ),
+    ]
+
+    # Response schema for structured JSON output from Gemini
+    RESPONSE_SCHEMA = types.Schema(
+        type=types.Type.OBJECT,
+        enum=[],
+        required=["questions"],
+        properties={
+            "questions": types.Schema(
+                type=types.Type.ARRAY,
+                description="List of quiz questions.",
+                items=types.Schema(
+                    type=types.Type.OBJECT,
+                    enum=[],
+                    required=["question_text", "answer_choices"],
+                    properties={
+                        "question_text": types.Schema(
+                            type=types.Type.STRING,
+                            description="The quiz question being asked.",
+                        ),
+                        "answer_choices": types.Schema(
+                            type=types.Type.ARRAY,
+                            description="Four answer choices.",
+                            items=types.Schema(
+                                type=types.Type.OBJECT,
+                                enum=[],
+                                required=["choice_text", "corresponding_category"],
+                                properties={
+                                    "choice_text": types.Schema(
+                                        type=types.Type.STRING,
+                                        description="The text of the answer choice.",
+                                    ),
+                                    "corresponding_category": types.Schema(
+                                        type=types.Type.STRING,
+                                        description="The category this choice corresponds to (filled by Gemini).",
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                ),
+            ),
+        },
+    )
+except ImportError:
+    logger.error("Cannot import google-generativeai. This functionality will be disabled.")
+    logger.error("Please install with: pip install google-generativeai")
 
 # ========================================================================
 #                  SECTION 1: TEAM DEFINITIONS AND CONSTANTS
@@ -32,75 +112,7 @@ TEAM_INFO = {
 #                  SECTION 2: GEMINI API CONFIGURATION
 # ========================================================================
 
-# Gemini API configuration for team quiz
-GEMINI_MODEL = "gemini-2.0-flash"  # Using the fast version of Gemini 2.0
-
-# Safety settings to ensure appropriate content for children
-SAFETY_SETTINGS = [
-    types.SafetySetting(
-        category="HARM_CATEGORY_HARASSMENT",
-        threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-    ),
-    types.SafetySetting(
-        category="HARM_CATEGORY_HATE_SPEECH",
-        threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-    ),
-    types.SafetySetting(
-        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-    ),
-    types.SafetySetting(
-        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-        threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-    ),
-    types.SafetySetting(
-        category="HARM_CATEGORY_CIVIC_INTEGRITY",
-        threshold="BLOCK_LOW_AND_ABOVE",  # Block most
-    ),
-]
-
-# Response schema for structured JSON output from Gemini
-RESPONSE_SCHEMA = types.Schema(
-    type=types.Type.OBJECT,
-    enum=[],
-    required=["questions"],
-    properties={
-        "questions": types.Schema(
-            type=types.Type.ARRAY,
-            description="List of quiz questions.",
-            items=types.Schema(
-                type=types.Type.OBJECT,
-                enum=[],
-                required=["question_text", "answer_choices"],
-                properties={
-                    "question_text": types.Schema(
-                        type=types.Type.STRING,
-                        description="The quiz question being asked.",
-                    ),
-                    "answer_choices": types.Schema(
-                        type=types.Type.ARRAY,
-                        description="Four answer choices.",
-                        items=types.Schema(
-                            type=types.Type.OBJECT,
-                            enum=[],
-                            required=["choice_text", "corresponding_category"],
-                            properties={
-                                "choice_text": types.Schema(
-                                    type=types.Type.STRING,
-                                    description="The text of the answer choice.",
-                                ),
-                                "corresponding_category": types.Schema(
-                                    type=types.Type.STRING,
-                                    description="The category this choice corresponds to (filled by Gemini).",
-                                ),
-                            },
-                        ),
-                    ),
-                },
-            ),
-        ),
-    },
-)
+# Gemini API configuration moved into the try-except block above
 
 # ========================================================================
 #                  SECTION 3: HELPER FUNCTIONS
@@ -161,6 +173,125 @@ Return exactly 5 questions in the specified JSON format, with each answer choice
 """
     return prompt
 
+def get_fallback_quiz_questions(selected_teams):
+    """Generate predefined fallback quiz questions when Gemini API is not available
+    
+    This function:
+    1. Takes a list of selected team names
+    2. Returns a set of predefined questions with answer choices mapped to teams
+    
+    Args:
+        selected_teams (list): List of selected team names
+        
+    Returns:
+        dict: JSON structure with fallback quiz questions
+    """
+    logger.info("Using fallback quiz questions (Gemini API unavailable)")
+    
+    # Ensure we have 2-4 valid teams
+    valid_teams = [team for team in selected_teams if team in TEAM_INFO]
+    if len(valid_teams) < 2:
+        # If we don't have enough valid teams, use the first teams from our list
+        valid_teams = list(TEAM_INFO.keys())[:4]
+    elif len(valid_teams) > 4:
+        # If we have too many teams, use just the first 4
+        valid_teams = valid_teams[:4]
+    
+    # Predefined questions that work with any combination of teams
+    fallback_questions = [
+        {
+            "question_text": "What would you do if you found a secret door in your school?",
+            "answer_choices": []
+        },
+        {
+            "question_text": "How do you approach solving a difficult puzzle?",
+            "answer_choices": []
+        },
+        {
+            "question_text": "What's your strategy when playing a team game?",
+            "answer_choices": []
+        },
+        {
+            "question_text": "What would you do with a day off from school?",
+            "answer_choices": []
+        },
+        {
+            "question_text": "How do you react when something doesn't go as planned?",
+            "answer_choices": []
+        }
+    ]
+    
+    # Answer choices for each team
+    team_answers = {
+        "EMBER": [
+            "Burst through immediately to see what's on the other side!",
+            "Try every approach rapidly until something works!",
+            "Lead the charge and inspire everyone with energy!",
+            "Go on an adventure, trying as many exciting activities as possible!",
+            "Jump into fixing it immediately with determination!"
+        ],
+        "TERRA": [
+            "Carefully examine it first and make a plan before proceeding.",
+            "Break it down into smaller parts and solve methodically.",
+            "Create a solid foundation for my team to build upon.",
+            "Spend time in nature or working on a meaningful project.",
+            "Stay calm and develop a practical solution step by step."
+        ],
+        "VEIL": [
+            "Watch from a distance first to see if others notice it.",
+            "Look for hidden patterns and unexpected connections.",
+            "Analyze the other team's strategy and find their weaknesses.",
+            "Research something fascinating that others don't know about.",
+            "Quietly observe and plan a different approach nobody expects."
+        ],
+        "AERIAL": [
+            "Think of creative ways to use the door for something fun!",
+            "Try unusual approaches nobody else would think of.",
+            "Come up with unexpected strategies that surprise everyone.",
+            "Create something original or explore somewhere new.",
+            "See it as an opportunity to try something completely different!"
+        ],
+        "HALO": [
+            "Tell friends so we can explore it together safely.",
+            "Ask others for input to find the best solution together.",
+            "Make sure everyone on the team feels included and valued.",
+            "Spend time connecting with friends and helping others.",
+            "Find a solution that makes everyone feel better about the situation."
+        ],
+        "FLUX": [
+            "Gather information quickly and adapt my approach as needed.",
+            "Try different approaches and adjust based on what works.",
+            "Switch roles whenever needed to help the team succeed.",
+            "Keep my options open and change plans based on what seems most interesting.",
+            "Quickly adjust my expectations and find a new opportunity."
+        ],
+        "NOVA": [
+            "Create a dramatic reveal and invite everyone to see what I found!",
+            "Challenge the conventional methods and create a breakthrough solution.",
+            "Completely change how the game is played with bold moves.",
+            "Do something that completely transforms my usual routine.",
+            "Use this as a chance to completely transform the situation!"
+        ],
+        "TEMPO": [
+            "Create a detailed plan for exploring it safely and efficiently.",
+            "Work through it step-by-step with careful attention to detail.",
+            "Create a precise strategy and ensure everyone follows it.",
+            "Schedule my time carefully to accomplish specific goals.",
+            "Analyze what went wrong and create a detailed plan to prevent it happening again."
+        ]
+    }
+    
+    # Build answer choices for each question based on selected teams
+    for i, question in enumerate(fallback_questions):
+        for team in valid_teams:
+            if team in team_answers:
+                question["answer_choices"].append({
+                    "choice_text": team_answers[team][i],
+                    "corresponding_category": team
+                })
+    
+    return {"questions": fallback_questions}
+
 def get_gemini_quiz_response(selected_teams):
     """Generate quiz questions using Gemini API
     
@@ -173,14 +304,20 @@ def get_gemini_quiz_response(selected_teams):
         selected_teams (list): List of selected team names
         
     Returns:
-        dict: JSON response from Gemini containing questions and answers
+        dict: JSON response from Gemini containing questions and answers,
+              or None if the API call fails or package is not available
     """
+    # Check if Gemini API is available
+    if not GEMINI_AVAILABLE:
+        logger.error("Cannot generate quiz: google-generativeai package is not installed")
+        return get_fallback_quiz_questions(selected_teams)
+        
     try:
         # Get API key from environment
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             logger.error("GEMINI_API_KEY environment variable not set")
-            return None
+            return get_fallback_quiz_questions(selected_teams)
             
         # Initialize the Gemini client
         client = genai.Client(api_key=api_key)
@@ -226,14 +363,14 @@ def get_gemini_quiz_response(selected_teams):
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse Gemini response as JSON: {e}")
                 logger.debug(f"Raw response: {response.text[:200]}...")
-                return None
+                return get_fallback_quiz_questions(selected_teams)
         else:
             logger.error("Empty response from Gemini API")
-            return None
+            return get_fallback_quiz_questions(selected_teams)
             
     except Exception as e:
         logger.error(f"Error calling Gemini API: {e}")
-        return None
+        return get_fallback_quiz_questions(selected_teams)
 
 # ========================================================================
 #                  SECTION 4: MAIN PROCESSING FUNCTIONS
@@ -244,7 +381,7 @@ def process_team_quiz_request(teams_data):
     
     This function:
     1. Validates the teams data
-    2. Calls Gemini API to generate questions
+    2. Calls Gemini API to generate questions (or uses fallback questions)
     3. Formats the response for Roblox
     
     Args:
@@ -254,6 +391,11 @@ def process_team_quiz_request(teams_data):
         dict: Formatted quiz data for Roblox, or error information
     """
     try:
+        # Inform if Gemini API is unavailable, but continue with fallback
+        if not GEMINI_AVAILABLE:
+            logger.warning("Team quiz using fallback questions: google-generativeai package not installed")
+            # We'll continue with fallback questions instead of failing completely
+            
         # Validate team names
         valid_teams = [team for team in teams_data if team in TEAM_INFO]
         
@@ -272,20 +414,27 @@ def process_team_quiz_request(teams_data):
                 "message": f"Invalid number of teams: {len(valid_teams)}. Must be 2-4 teams."
             }
             
-        # Get quiz questions from Gemini
+        # Get quiz questions from Gemini (or fallback if Gemini unavailable)
         quiz_data = get_gemini_quiz_response(valid_teams)
         
         if not quiz_data:
+            # This should never happen since we're using fallback questions,
+            # but let's handle it just in case
             return {
                 "status": "error",
                 "message": "Failed to generate quiz questions"
             }
             
         # Return the successfully generated quiz
+        status_message = "Quiz questions generated successfully"
+        if not GEMINI_AVAILABLE:
+            status_message += " (using fallback questions)"
+            
         return {
             "status": "success",
-            "message": "Quiz questions generated successfully",
-            "quiz_data": quiz_data
+            "message": status_message,
+            "quiz_data": quiz_data,
+            "using_fallback": not GEMINI_AVAILABLE
         }
         
     except Exception as e:
