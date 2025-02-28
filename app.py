@@ -535,6 +535,47 @@ def debug_info():
     
     return jsonify(info)
 
+# --- 9.11: /team_quiz route - endpoint to receive team quiz data from Roblox ---
+# ------------------------------------------------------------------------------
+# This endpoint receives team quiz data from the Roblox game
+@app.route('/team_quiz', methods=['POST'])
+def team_quiz():
+    """Handle team quiz data from Roblox
+    
+    This function:
+    1. Receives team quiz data including game_id and teams information
+    2. Validates the received data
+    3. [Future] Will process this data and send it to Gemini AI
+    4. [Future] Will return the AI's response back to Roblox
+    
+    Currently just acknowledges receipt of the data.
+    """
+    try:
+        # Get and validate the JSON data from the request
+        data = request.get_json()
+        valid, message = validate_request_data(data, ['game_id', 'teams'])
+        if not valid:
+            logger.warning(f"team_quiz: {message}")
+            return jsonify({"status": "error", "message": message}), 400
+
+        # Extract data from the request
+        game_id = data['game_id']
+        teams = data['teams']
+        
+        logger.info(f"Team quiz data received for game ID: {game_id}")
+        logger.debug(f"Teams data: {teams}")
+        
+        # For now, just acknowledge receipt of the data
+        # Future implementation will process the data and use Gemini AI
+        return jsonify({
+            "status": "success",
+            "message": "Team quiz data received successfully",
+            "game_id": game_id
+        }), 200
+        
+    except Exception as e:
+        return handle_api_error(e, "team quiz data processing")
+
 # ========================================================================
 #                      SECTION 10: MAIN APPLICATION START
 # ========================================================================
