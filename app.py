@@ -41,6 +41,12 @@ from gemini_utils import (
     create_dynamic_gemini_model     # Create a Gemini model with custom settings
 )
 
+# Import team quiz utilities
+from team_quiz_utils import (
+    process_team_quiz_request,      # Process team quiz requests and get Gemini responses
+    TEAM_INFO                       # Team definitions and their traits
+)
+
 # Logging - For tracking application activity and errors
 import logging
 
@@ -545,10 +551,8 @@ def team_quiz():
     This function:
     1. Receives team quiz data including game_id and teams information
     2. Validates the received data
-    3. [Future] Will process this data and send it to Gemini AI
-    4. [Future] Will return the AI's response back to Roblox
-    
-    Currently just acknowledges receipt of the data.
+    3. Processes the team data and creates a personalized quiz using Gemini AI
+    4. Returns quiz questions back to Roblox
     """
     try:
         # Get and validate the JSON data from the request
@@ -565,13 +569,14 @@ def team_quiz():
         logger.info(f"Team quiz data received for game ID: {game_id}")
         logger.debug(f"Teams data: {teams}")
         
-        # For now, just acknowledge receipt of the data
-        # Future implementation will process the data and use Gemini AI
-        return jsonify({
-            "status": "success",
-            "message": "Team quiz data received successfully",
-            "game_id": game_id
-        }), 200
+        # Process the team data and generate quiz questions
+        result = process_team_quiz_request(teams)
+        
+        # Add the game_id to the response for tracking
+        result['game_id'] = game_id
+        
+        # Return the quiz data to Roblox
+        return jsonify(result), 200
         
     except Exception as e:
         return handle_api_error(e, "team quiz data processing")
