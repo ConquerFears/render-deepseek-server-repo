@@ -129,24 +129,33 @@ def create_team_prompt(selected_teams):
     teams_text = "; ".join(team_descriptions)
     
     # Create the full prompt
-    prompt = f"""Generate 5 short, fun, personality-quiz style questions for players aged 8-18 in a Roblox game. 
+    prompt = f"""Generate 5 creative personality-quiz questions for players aged 8-18 in a Roblox game. 
 Each question should have exactly {len(selected_teams)} answer choices, with each choice corresponding to one of these team personalities:
 {teams_text}
 
-Requirements:
-1. Questions should be brief, clear, and age-appropriate
-2. Each answer choice must correspond to ONE specific team from the list
-3. Keep the corresponding_category strictly to one of: {", ".join(selected_teams)}
-4. Each question should have exactly {len(selected_teams)} answer choices
-5. Make questions relatable to young players (hobbies, school, friends, games, etc.)
-6. Focus on personality traits, preferences, and situations
-7. Use simple language appropriate for the age group
-8. Avoid mature themes, complex situations, or overly abstract concepts
+Key requirements:
+1. Create EQUAL APPEAL in all answer choices - every option should sound fun, interesting, and desirable
+2. Use a mix of question types:
+   - Abstract concepts (favorite color, time of day, season, weather)
+   - Subtle scenario responses (not obvious which team matches which response)
+   - Imaginative "which would you choose" questions with equally appealing options
+   - Preferences that don't obviously map to specific traits
+3. Questions should be brief, clear, and age-appropriate
+4. Each answer choice must correspond to ONE specific team from the list
+5. Keep the corresponding_category strictly to one of: {", ".join(selected_teams)}
+6. Each question should have exactly {len(selected_teams)} answer choices
+7. AVOID making some options clearly more appealing than others
 
-Example question format:
-"What would you do if you found a secret door in your school?"
-- "Burst through it immediately to see what's on the other side!" (EMBER)
-- "Carefully examine it first and make a plan before proceeding." (TERRA)
+Example question formats:
+"What time of day energizes you the most?"
+- "Sunrise, when everything is new and full of possibility" (AERIAL)
+- "Midday, when the sun is brightest and most powerful" (EMBER)
+
+"Choose a magical power:"
+- "The ability to transform anything" (FLUX)
+- "The power to see hidden truths" (VEIL)
+- "Unbreakable protective shields" (TERRA)
+- "Creating spectacular light shows" (NOVA)
 
 Return exactly 5 questions in the specified JSON format, with each answer choice mapping to one team category.
 """
