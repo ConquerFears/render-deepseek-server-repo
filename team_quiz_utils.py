@@ -29,28 +29,13 @@ try:
     GEMINI_MODEL = "gemini-2.0-flash"  # Using the fast version of Gemini 2.0
 
     # Safety settings to ensure appropriate content for children
-    SAFETY_SETTINGS = [
-        {
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
-        },
-        {
-            "category": "HARM_CATEGORY_HATE_SPEECH",
-            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
-        },
-        {
-            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
-        },
-        {
-            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-            "threshold": "BLOCK_LOW_AND_ABOVE",  # Block most
-        },
-        {
-            "category": "HARM_CATEGORY_CIVIC_INTEGRITY",
-            "threshold": "BLOCK_NONE",  # Block most
-        },
-    ]
+    SAFETY_SETTINGS = {
+        "harassment": "block_low_and_above",
+        "hate_speech": "block_low_and_above",
+        "sexually_explicit": "block_low_and_above",
+        "dangerous_content": "block_low_and_above",
+        "civic_integrity": "block_none"
+    }
 
     # Response schema for structured JSON output from Gemini
     RESPONSE_SCHEMA = {
@@ -325,7 +310,7 @@ def get_gemini_quiz_response(selected_teams):
         prompt = create_team_prompt(selected_teams)
         logger.debug(f"Generated prompt for Gemini: {prompt[:100]}...")
         
-        # Create a model using the same pattern as the working gemini_utils.py
+        # Create a model using the corrected safety settings format
         model = genai.GenerativeModel(
             model_name=GEMINI_MODEL,
             generation_config={
