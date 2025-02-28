@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)  # Create a logger for this module
 GEMINI_AVAILABLE = False
 try:
     import google.generativeai as genai  # Google's Gemini AI API client library
+    from google.generativeai.types.safety_types import HarmCategory, HarmBlockThreshold
     GEMINI_AVAILABLE = True
     logger.info("Successfully imported google-generativeai package")
     
@@ -30,11 +31,11 @@ try:
 
     # Safety settings to ensure appropriate content for children
     SAFETY_SETTINGS = {
-        "harassment": "block_low_and_above",
-        "hate_speech": "block_low_and_above",
-        "sexually_explicit": "block_low_and_above",
-        "dangerous_content": "block_low_and_above",
-        "civic_integrity": "block_none"
+        HarmCategory.HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.CIVIC_INTEGRITY: HarmBlockThreshold.BLOCK_NONE
     }
 
     # Response schema for structured JSON output from Gemini
