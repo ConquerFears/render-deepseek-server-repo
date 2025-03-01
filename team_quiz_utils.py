@@ -129,33 +129,45 @@ def create_team_prompt(selected_teams):
     teams_text = "; ".join(team_descriptions)
     
     # Create the full prompt
-    prompt = f"""Generate 5 creative personality-quiz questions for players aged 8-18 in a Roblox game. 
+    prompt = f"""Generate 5 quiz questions for players aged 8-18 in a Roblox game, using a slightly mysterious "AI evaluation" tone. 
 Each question should have exactly {len(selected_teams)} answer choices, with each choice corresponding to one of these team personalities:
 {teams_text}
 
 Key requirements:
-1. Create EQUAL APPEAL in all answer choices - every option should sound fun, interesting, and desirable
-2. Use a mix of question types:
-   - Abstract concepts (favorite color, time of day, season, weather)
-   - Subtle scenario responses (not obvious which team matches which response)
-   - Imaginative "which would you choose" questions with equally appealing options
-   - Preferences that don't obviously map to specific traits
-3. Questions should be brief, clear, and age-appropriate
-4. Each answer choice must correspond to ONE specific team from the list
-5. Keep the corresponding_category strictly to one of: {", ".join(selected_teams)}
-6. Each question should have exactly {len(selected_teams)} answer choices
-7. AVOID making some options clearly more appealing than others
+1. TONE: Questions should feel like a mysterious AI is evaluating the player's mind
+   - Use phrases like "I need to know...", "Choose what feels right...", "This reveals your nature..."
+   - Create a slightly spooky but NOT scary atmosphere
+   - Keep language SIMPLE for younger players (ages 8-18)
+   - Don't assume the AI already knows things about the player
+
+2. APPEAL: Create EQUAL APPEAL in all answer choices
+   - Every option should sound interesting and desirable
+   - No option should be obviously better than others
+
+3. QUESTION TYPES: Use a mix of:
+   - Simple abstract concepts (colors, elements, weather)
+   - Basic "what would you choose" scenarios
+   - Mysterious but age-appropriate situations
+   - Questions about preferences or dreams
+
+4. FORMAT:
+   - Questions should be brief, clear, and age-appropriate
+   - Each answer choice must correspond to ONE specific team
+   - Keep the corresponding_category strictly to one of: {", ".join(selected_teams)}
+   - Each question should have exactly {len(selected_teams)} answer choices
 
 Example question formats:
-"What time of day energizes you the most?"
-- "Sunrise, when everything is new and full of possibility" (AERIAL)
-- "Midday, when the sun is brightest and most powerful" (EMBER)
+"What do you see when you look at the dark?"
+- "Hidden paths others miss" (VEIL)
+- "A challenge waiting for light" (EMBER)
 
-"Choose a magical power:"
-- "The ability to transform anything" (FLUX)
-- "The power to see hidden truths" (VEIL)
-- "Unbreakable protective shields" (TERRA)
-- "Creating spectacular light shows" (NOVA)
+"I need to understand your mind. Choose what feels right:"
+- "The perfect order of a puzzle solved" (TEMPO)
+- "The bright spark of a new idea" (EMBER)
+
+"Everyone has a secret. What kind is yours?"
+- "A big change you want to make" (NOVA)
+- "A clever plan you're working on" (FLUX)
 
 Return exactly 5 questions in the specified JSON format, with each answer choice mapping to one team category.
 """
